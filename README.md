@@ -1,15 +1,14 @@
 # Base para Projeto 1 - Robótica 
 
-Nome do grupo: 
+Nome do grupo: Quinta_dos_Invernos_5a
 
 ____________
 
 Nome dos integrantes: 
 
-* pessoa 1
-* pessoa 2
-* pessoa 3
-* pessoa 4
+* Guilherme Rosada
+* Ivan Barros
+* Jamesson Santos
 
 
 Visite sempre o enunciado abaixo para atualizacões: 
