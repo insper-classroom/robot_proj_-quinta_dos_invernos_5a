@@ -47,6 +47,13 @@ class Robot:
         self.visao_trilha = None 
         self.visao_aruco = None
 
+        self.STATUS = {
+            'trilhaON': True,
+            'arucoON': False,
+            'searchCreepON': True,
+            'searchBaseON': False,
+        }
+
         #% Não sei oq fazem:
         # tfl = tf2_ros.TransformListener(tf_buffer) #conversao do sistema de coordenadas 
         # tolerancia = 25
@@ -59,25 +66,30 @@ class Robot:
             while not rospy.is_shutdown():
                 #<> Usar STATUS p/ movimentação
 
+                if self.STATUS['trilhaON']:
                 #$ if TrilhaON:
                     # --> Faz o robô percorrer a trilha no sentido que combinamos
+                    vel = Twist(Vector3(0.1,0,0), Vector3(0,0,0))
+                    self.velocidade_saida.publish(vel)
 
+                if self.STATUS['searchCreepON']:
                 #$ if SearchCreepON:
                     # --> Faz o robô procurar o creeper da cor recebida    
                     # --> Se achar: (1) - Marca posição; (2) - Vai até ele e pega
+                    print("Cadê o creeper?")
+                    pass
 
+                if self.STATUS['searchBaseON']:
                 #$ if SearchBaseON:
                     # --> Faz o robô procurar pelas estações
                     # --> Se achar: Marca posição
+                    pass
 
-                vel = Twist(Vector3(0,0,0), Vector3(0,0,math.pi/10.0))
-                self.velocidade_saida.publish(vel)
                 rospy.sleep(0.1)
 
 
         except rospy.ROSInterruptException:
             print("Ocorreu uma exceção com o rospy")
-
 
     def trata_frame(self, frame):
         """ 
@@ -102,26 +114,28 @@ class Robot:
             cv_image_original = self.bridge.compressed_imgmsg_to_cv2(frame, "bgr8")
             cv2.imshow("Camera", cv_image_original)
 
-            #$ Segmenta Amarelo (Trilha) 
-            #>> apenas para visualização (não é necessário exibir a imagem toda vez)
-            segmentado_trilha = self.segmenta_cor(cv_image_original, "amarelo")
-            cv2.imshow("seg_trilha", segmentado_trilha)
+            if self.STATUS['trilhaON']:
+                #$ Segmenta Amarelo (Trilha) 
+                #>> apenas para visualização (não é necessário exibir a imagem toda vez)
+                segmentado_trilha = self.segmenta_cor(cv_image_original, "amarelo")
+                cv2.imshow("seg_trilha", segmentado_trilha)
+                cv2.waitKey(1)
 
-            #$ Segmenta Creeper
-            #>> apenas para visualização (não é necessário exibir a imagem toda vez)
-            """
-            Para que a imagem do Creeper não atrapalhe na detecção da linha, 
-            acredito que tenhamos que analisar os filtros em imagens diferentes.  
-            """
-            segmentado_creeper = self.segmenta_cor(cv_image_original, "laranja")  #! Depois, vamos automatizar para escolher a cor da missão
-            cv2.imshow("seg_creeper", segmentado_creeper)
+            if self.STATUS['searchCreepON']:
+                #$ Segmenta Creeper
+                #>> apenas para visualização (não é necessário exibir a imagem toda vez)
+                """
+                Para que a imagem do Creeper não atrapalhe na detecção da linha, 
+                acredito que tenhamos que analisar os filtros em imagens diferentes.  
+                """
+                segmentado_creeper = self.segmenta_cor(cv_image_original, "verde")  #! Depois, vamos automatizar para escolher a cor da missão
+                cv2.imshow("seg_creeper", segmentado_creeper)
+                cv2.waitKey(1)
             
-            cv2.waitKey(1)
+            # cv2.waitKey(1)
 
         except CvBridgeError as e:
-            print('ex', e)
-
-        
+            print('ex', e)      
 
     def run_mobileNet(self):
         pass
@@ -129,7 +143,6 @@ class Robot:
     def draw_crossHair(self):
         # Desenha + no meio da tela
         pass
-
 
     def segmenta_cor(self, frame, COR):
         output = frame.copy()
