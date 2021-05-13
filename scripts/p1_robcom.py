@@ -35,12 +35,16 @@ class Robot:
         Cria variáveis necessárias para o funcionamento do robô
         ou para armazenamento de dados 
         """
+
         self.bridge = CvBridge()
         rospy.init_node("cor")
         
         self.topico_imagem = "/camera/image/compressed"
-        self.recebedor = rospy.Subscriber(self.topico_imagem, CompressedImage, self.trata_frame, queue_size=4, buff_size=1)
+        self.recebedor = rospy.Subscriber(self.topico_imagem, CompressedImage, self.trata_frame, queue_size=1, buff_size=2**24)
         self.velocidade_saida = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
+
+        self.output_img = None
+        self.CENTRO_ROBO = None
 
         #! Variáveis para guardar filtros de interesse
         self.visao_creeper = None
@@ -50,42 +54,62 @@ class Robot:
         self.STATUS = {
             'trilhaON': True,
             'arucoON': False,
-            'searchCreepON': True,
+            'searchCreepON': False,
+            'searchCreepDetected': False,
+            'searchCreepConfirmed': False,
             'searchBaseON': False,
+        }
+
+        self.LOCALIZACOES = {
+            'creeper': None,
+            'base': None,
+        }
+
+        self.ALVO = {
+            'centro': None,
+            'distancia': None,
         }
 
         #% Não sei oq fazem:
         # tfl = tf2_ros.TransformListener(tf_buffer) #conversao do sistema de coordenadas 
         # tolerancia = 25
+        
+
+        #! LOOPING PRINCIPAL
+        r = rospy.Rate(100)
+        while not rospy.is_shutdown():
+            self.run()
+            r.sleep() 
 
     def run(self):
         """
         Função que chama os métodos principais e os mantém em loop 
         """
         try: 
-            while not rospy.is_shutdown():
-                #<> Usar STATUS p/ movimentação
+            #<> Usar STATUS p/ MOVIMENTAÇÃO
 
-                if self.STATUS['trilhaON']:
-                #$ if TrilhaON:
-                    # --> Faz o robô percorrer a trilha no sentido que combinamos
-                    vel = Twist(Vector3(0.1,0,0), Vector3(0,0,0))
-                    self.velocidade_saida.publish(vel)
+            if self.STATUS['trilhaON']:
+            #$ if TrilhaON:
+                # --> Faz o robô percorrer a trilha no sentido que combinamos
+                vel = Twist(Vector3(0.15,0,0), Vector3(0,0,0))
+                self.velocidade_saida.publish(vel)
 
-                if self.STATUS['searchCreepON']:
-                #$ if SearchCreepON:
-                    # --> Faz o robô procurar o creeper da cor recebida    
-                    # --> Se achar: (1) - Marca posição; (2) - Vai até ele e pega
-                    print("Cadê o creeper?")
-                    pass
+            else:
+                vel = Twist(Vector3(0.0,0,0), Vector3(0,0,0))
+                self.velocidade_saida.publish(vel)
 
-                if self.STATUS['searchBaseON']:
-                #$ if SearchBaseON:
-                    # --> Faz o robô procurar pelas estações
-                    # --> Se achar: Marca posição
-                    pass
 
-                rospy.sleep(0.1)
+            if self.STATUS['searchCreepDetected']:
+            #$ if SearchCreepDetected:
+                # --> Faz o robô confirmar se o creeper avistado é da id desejada
+                # --> Se achar: (1) - Marca posição; (2) - Vai até ele e pega
+                self.centraliza_robo(self.ALVO['centro'])
+
+            if self.STATUS['searchBaseON']:
+            #$ if SearchBaseON:
+                # --> Faz o robô procurar pelas estações
+                # --> Se achar: Marca posição
+                pass
 
 
         except rospy.ROSInterruptException:
@@ -108,18 +132,20 @@ class Robot:
         #     print("Descartando por causa do delay do frame:", delay)
         #     return 
 
-        
         try:
-            #$ Exibe Imagem Original
+            #$ Exibe Imagem Originaloutput_img
             cv_image_original = self.bridge.compressed_imgmsg_to_cv2(frame, "bgr8")
             cv2.imshow("Camera", cv_image_original)
+            cv2.waitKey(1)
+            self.CENTRO_ROBO = (cv_image_original.shape[1]//2, cv_image_original.shape[0]//2)
+            self.output_img = cv_image_original.copy()
 
-            if self.STATUS['trilhaON']:
-                #$ Segmenta Amarelo (Trilha) 
-                #>> apenas para visualização (não é necessário exibir a imagem toda vez)
-                segmentado_trilha = self.segmenta_cor(cv_image_original, "amarelo")
-                cv2.imshow("seg_trilha", segmentado_trilha)
-                cv2.waitKey(1)
+            # if self.STATUS['trilhaON']:
+            #     #$ Segmenta Amarelo (Trilha) 
+            #     #>> apenas para visualização (não é necessário exibir a imagem toda vez)
+            #     segmentado_trilha = self.segmenta_cor(cv_image_original, "amarelo")
+            #     cv2.imshow("seg_trilha", segmentado_trilha)
+            #     cv2.waitKey(1)
 
             if self.STATUS['searchCreepON']:
                 #$ Segmenta Creeper
@@ -128,11 +154,16 @@ class Robot:
                 Para que a imagem do Creeper não atrapalhe na detecção da linha, 
                 acredito que tenhamos que analisar os filtros em imagens diferentes.  
                 """
-                segmentado_creeper = self.segmenta_cor(cv_image_original, "verde")  #! Depois, vamos automatizar para escolher a cor da missão
+                segmentado_creeper = self.segmenta_cor(cv_image_original, "azul")  #! Depois, vamos automatizar para escolher a cor da missão
+                self.calcula_area(segmentado_creeper)  # > 800
                 cv2.imshow("seg_creeper", segmentado_creeper)
-                cv2.waitKey(1)
+
+
+                #! CALCULA ÁREA --> se maior q X -> searchCreepDetected =True --> centraliza no creeper e aproxima.
             
-            # cv2.waitKey(1)
+            # cv2.imshow("Camera", self.output_img)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
 
         except CvBridgeError as e:
             print('ex', e)      
@@ -176,6 +207,58 @@ class Robot:
         segmentado_cor = cv2.morphologyEx(segmentado_cor,cv2.MORPH_CLOSE,np.ones((7, 7)))
         
         return segmentado_cor
+
+    def calcula_area(self, segmentado):
+        contornos, arvore = cv2.findContours(segmentado.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE) 
+
+        maior_contorno = None
+        maior_area = 0
+
+        for cnt in contornos:
+            area = cv2.contourArea(cnt)
+            if area > maior_area:
+                maior_contorno = cnt
+                maior_area = area
+        
+        if maior_area > 1000:
+            self.STATUS['searchCreepDetected'] = True  #! Faz o robô centralizar E aproximar do creeper
+            self.STATUS['trilhaON'] = False #! Faz o robô parar de seguir linha
+            print(f"Creeper avistado -- {maior_area}")
+            print(f" trilha: {self.STATUS['trilhaON']}")
+
+        if not maior_contorno is None:
+            media = maior_contorno.mean(axis=0)
+            media = media.astype(np.int32)
+            # Desenha um circulo no centro do creeper
+            # cv2.circle(self.output_img, (media[0], media[1]), 5, [100, 255, 100])
+
+            # Guarda a posição do centro em ALVOS:
+            self.ALVO['centro'] = media[0] #(x,y)
+
+
+        #! DESENHA O CENTRO DA ÁREA NA IMG ORIGINAL
+
+    def centraliza_robo(self, alvo):
+        # Centraliza o robô, apontando para o creeper
+        print("Centralizar robô com o Alvo")
+
+
+        while (abs(alvo[0] - self.CENTRO_ROBO[0]) >= 20):
+            if (alvo[0] > self.CENTRO_ROBO[0]):
+                # Gira p/ direita
+                vel = Twist(Vector3(0.0,0,0), Vector3(0,0,-0.1))
+                self.velocidade_saida.publish(vel)
+            else:
+                # Gira p/ esquerda 
+                vel = Twist(Vector3(0.0,0,0), Vector3(0,0,0.1))
+                self.velocidade_saida.publish(vel)
+
+        # PARAR
+        vel = Twist(Vector3(0.0,0,0), Vector3(0,0,0))
+        self.velocidade_saida.publish(vel)
+        print("Centralizado")
+
+
 
     def encontra_trilha(self):
         # Trabalhar com a imagem segmentado do amarelo
