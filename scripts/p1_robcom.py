@@ -18,11 +18,12 @@ from geometry_msgs.msg import Twist, Vector3, Pose, Vector3Stamped
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Header
 import visao_module
-
+import aruco
 
 """
 Arquivo para trabalharmos usando classe e orientação a objetos:
 """
+goal = ("blue", 22, "dog")
 
 # AMARELO_FAIXA = np.array([255,255,0])
 # VERDE_CREEP = np.array([1,255,2])
@@ -70,6 +71,12 @@ class Robot:
             'distancia': None,
         }
 
+        self.ID = {
+            'ids': None,
+            'comparado': 0,
+            'match': 0,
+        }
+
         #% Não sei oq fazem:
         # tfl = tf2_ros.TransformListener(tf_buffer) #conversao do sistema de coordenadas 
         # tolerancia = 25
@@ -98,6 +105,10 @@ class Robot:
                 vel = Twist(Vector3(0.0,0,0), Vector3(0,0,0))
                 self.velocidade_saida.publish(vel)
 
+            if self.STATUS['arucoON']:
+            #$ if arucoON:
+                # --> Faz o robô procurar o id desejado
+                self.localiza_id(frame)
 
             if self.STATUS['searchCreepDetected']:
             #$ if SearchCreepDetected:
@@ -258,7 +269,28 @@ class Robot:
         self.velocidade_saida.publish(vel)
         print("Centralizado")
 
+    def localiza_id(self, frame):
+        try:
+            cv_image_original = self.bridge.compressed_imgmsg_to_cv2(frame, "bgr8")
+            aruco_image = cv_image_original.copy()
+            ids = aruco.roda_todo_frame(aruco_image)
 
+            self.ID['comparado'] = ids[0][0]
+
+            while self.STATUS['searchCreepON']:
+                if self.ID['match'] > 200:
+                    self.STATUS['searchCreepDetected'] = True
+                    self.STATUS['searchCreepON'] = False
+
+                # Se for falso, volta para a pista:
+                else:
+                    self.ID['match'] = 0
+
+                if self.ID['comparado'] == goal[1]:
+                    self.ID['match'] += 1
+
+        except CvBridgeError as e:
+            print('ex', e)  
 
     def encontra_trilha(self):
         # Trabalhar com a imagem segmentado do amarelo
