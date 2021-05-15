@@ -124,12 +124,15 @@ def roda_todo_frame(imagem):
 			for i,j in zip(range(4),range(4,8)): cv_image = cv2.line(cv_image, tuple(imgpts[i]), tuple(imgpts[j]),(0,0,255),4);
 			cv_image = cv2.drawContours(cv_image, [imgpts[4:]],-1,(0,0,255),4)
 			
+			ids = ids.tolist()
 
 		# Exibe tela
 		cv2.imshow("Camera", cv_image)
 		cv2.waitKey(1)
 	except CvBridgeError as e:
 		print('ex', e)
+
+	return ids
 	
 if __name__=="__main__":
 	rospy.init_node("aruco")

@@ -18,7 +18,7 @@ from geometry_msgs.msg import Twist, Vector3, Pose, Vector3Stamped
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Header
 import visao_module
-import aruco
+import aruco1
 
 """
 Arquivo para trabalharmos usando classe e orientação a objetos:
@@ -54,8 +54,8 @@ class Robot:
 
         self.STATUS = {
             'trilhaON': True,
-            'arucoON': False,
-            'searchCreepON': False,
+            'arucoON': True,
+            'searchCreepON': True,
             'searchCreepDetected': False,
             'searchCreepConfirmed': False,
             'searchBaseON': False,
@@ -104,11 +104,6 @@ class Robot:
             else:
                 vel = Twist(Vector3(0.0,0,0), Vector3(0,0,0))
                 self.velocidade_saida.publish(vel)
-
-            if self.STATUS['arucoON']:
-            #$ if arucoON:
-                # --> Faz o robô procurar o id desejado
-                self.localiza_id(frame)
 
             if self.STATUS['searchCreepDetected']:
             #$ if SearchCreepDetected:
@@ -168,6 +163,9 @@ class Robot:
                 segmentado_creeper = self.segmenta_cor(cv_image_original, "azul")  #! Depois, vamos automatizar para escolher a cor da missão
                 self.calcula_area(segmentado_creeper)  # > 800
                 cv2.imshow("seg_creeper", segmentado_creeper)
+
+            if self.STATUS["arucoON"]:
+                self.localiza_id(frame)
 
 
                 #! CALCULA ÁREA --> se maior q X -> searchCreepDetected =True --> centraliza no creeper e aproxima.
@@ -271,16 +269,17 @@ class Robot:
 
     def localiza_id(self, frame):
         try:
-            cv_image_original = self.bridge.compressed_imgmsg_to_cv2(frame, "bgr8")
-            aruco_image = cv_image_original.copy()
-            ids = aruco.roda_todo_frame(aruco_image)
-
+            #cv_image_original = self.bridge.compressed_imgmsg_to_cv2(frame, "bgr8")
+            #aruco_image = cv_image_original.copy()
+            ids = aruco1.roda_todo_frame(frame)
+            
             self.ID['comparado'] = ids[0][0]
 
             while self.STATUS['searchCreepON']:
                 if self.ID['match'] > 200:
-                    self.STATUS['searchCreepDetected'] = True
-                    self.STATUS['searchCreepON'] = False
+                    #self.STATUS['searchCreepDetected'] = True
+                    #self.STATUS['searchCreepON'] = False
+                    print('achou')
 
                 # Se for falso, volta para a pista:
                 else:
@@ -288,7 +287,6 @@ class Robot:
 
                 if self.ID['comparado'] == goal[1]:
                     self.ID['match'] += 1
-
         except CvBridgeError as e:
             print('ex', e)  
 

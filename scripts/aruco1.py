@@ -58,8 +58,7 @@ def roda_todo_frame(imagem):
 		
 		gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
 		corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
-		
-		if ids is not None and ids[0] == id_to_find :
+		if ids is not None:
 			#-- ret = [rvec, tvec, ?]
 			#-- array of rotation and position of each marker in camera frame
 			#-- rvec = [[rvec_1], [rvec_2], ...]    attitude of the marker respect to camera frame
@@ -85,21 +84,26 @@ def roda_todo_frame(imagem):
 			str_dist = "Dist aruco=%4.0f  scan=%4.0f"%(distance, scan_dist)
 			print(str_dist)
 			cv2.putText(cv_image, str_dist, (0, 15), font, 1, (0, 255, 0), 1, cv2.LINE_AA)
-
+			
+			j = int((cv_image.shape[1])/2)
+			i = int((cv_image.shape[0])/2)
 			# Linha referencia em X
-			cv2.line(cv_image, (cv_image.shape[1]/2,cv_image.shape[0]/2), ((cv_image.shape[1]/2 + 50),(cv_image.shape[0]/2)), (0,0,255), 5) 
+			cv2.line(cv_image, (j,i), ((j + 50),i), (0,0,255), 5) 
 			# Linha referencia em Y
-			cv2.line(cv_image, (cv_image.shape[1]/2,cv_image.shape[0]/2), (cv_image.shape[1]/2,(cv_image.shape[0]/2 + 50)), (0,255,0), 5) 	
+			cv2.line(cv_image, (j,i), (j,(i + 50)), (0,255,0), 5) 	
 
 
 			cv2.putText(cv_image, "%.1f cm -- %.0f deg" % ((tvec[2]), (rvec[2] / 3.1415 * 180)), (0, 230), font, 1, (244, 244, 244), 1, cv2.LINE_AA)
+			ids = ids.tolist()
 
 		# Exibe tela
 		cv2.imshow("Camera", cv_image)
 		cv2.waitKey(1)
 	except CvBridgeError as e:
 		print('ex', e)
-	
+
+	return ids 
+
 if __name__=="__main__":
 	rospy.init_node("aruco")
 
