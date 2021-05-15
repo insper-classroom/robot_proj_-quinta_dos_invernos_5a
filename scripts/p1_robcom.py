@@ -45,6 +45,7 @@ class Robot:
 
         self.output_img = None
         self.CENTRO_ROBO = None
+        self.tolerancia_giro = 10
 
         #! Variáveis para guardar filtros de interesse
         self.visao_creeper = None
@@ -53,6 +54,7 @@ class Robot:
 
         self.STATUS = {
             'trilhaON': True,
+            'searchTrilha': False,
             'arucoON': False,
             'searchCreepON': False,
             'searchCreepDetected': False,
@@ -89,15 +91,11 @@ class Robot:
             #<> Usar STATUS p/ MOVIMENTAÇÃO
 
             if self.STATUS['trilhaON']:
-            #$ if TrilhaON:
-                # --> Faz o robô percorrer a trilha no sentido que combinamos
-                vel = Twist(Vector3(0.15,0,0), Vector3(0,0,0))
-                self.velocidade_saida.publish(vel)
+                pass
 
-            else:
-                vel = Twist(Vector3(0.0,0,0), Vector3(0,0,0))
-                self.velocidade_saida.publish(vel)
-
+            if self.STATUS["searchTrilha"]:
+                # --> Faz robô girar para a direita procurando a pista
+                self.gira_direita()
 
             if self.STATUS['searchCreepDetected']:
             #$ if SearchCreepDetected:
@@ -116,21 +114,10 @@ class Robot:
             print("Ocorreu uma exceção com o rospy")
 
     def trata_frame(self, frame):
+        global HEIGHT, WIDTH
         """ 
         Função assíncrona de Callback, é chamada toda vez pelo Subscriber 
         """
-        # Trata delay:
-
-        # now = rospy.get_rostime()
-        # imgtime = frame.header.stamp
-        # lag = now-imgtime # calcula o lag
-        # delay = lag.nsecs
-        # # print("delay ", "{:.3f}".format(delay/1.0E9))
-        # if delay > atraso and check_delay==True:
-        #     # Esta logica do delay so' precisa ser usada com robo real e rede wifi 
-        #     # serve para descartar imagens antigas
-        #     print("Descartando por causa do delay do frame:", delay)
-        #     return 
 
         try:
             #$ Exibe Imagem Originaloutput_img
@@ -140,12 +127,17 @@ class Robot:
             self.CENTRO_ROBO = (cv_image_original.shape[1]//2, cv_image_original.shape[0]//2)
             self.output_img = cv_image_original.copy()
 
-            # if self.STATUS['trilhaON']:
-            #     #$ Segmenta Amarelo (Trilha) 
-            #     #>> apenas para visualização (não é necessário exibir a imagem toda vez)
-            #     segmentado_trilha = self.segmenta_cor(cv_image_original, "amarelo")
-            #     cv2.imshow("seg_trilha", segmentado_trilha)
-            #     cv2.waitKey(1)
+            HEIGHT = cv_image_original.shape[0]
+            WIDTH = cv_image_original.shape[1]
+
+            if self.STATUS['trilhaON']:
+                #$ Segmenta Amarelo (Trilha) e faz robô andar a trilha
+                self.percorre_trilha(self.output_img)
+                cv2.waitKey(1)
+
+            if self.STATUS["searchTrilha"]:
+                #$ Permanece girando até que encontre a pista
+                self.encontra_contornos(self.segmenta_cor(self.output_img, 'amarelo'))
 
             if self.STATUS['searchCreepON']:
                 #$ Segmenta Creeper
@@ -171,15 +163,17 @@ class Robot:
     def run_mobileNet(self):
         pass
     
-    def draw_crossHair(self):
+    def draw_crossHair(self, img, point, size, color):
         # Desenha + no meio da tela
-        pass
+        x,y = point
+        cv2.line(img,(x - size,y),(x + size,y),color,2)
+        cv2.line(img,(x,y - size),(x, y + size),color,2)
 
     def segmenta_cor(self, frame, COR):
         output = frame.copy()
         if COR == 'amarelo':
-            bgr_min = np.array([0, 50, 50], dtype=np.uint8)
-            bgr_max = np.array([0,255,255], dtype=np.uint8)
+            bgr_min = np.array([0, 190, 190], dtype=np.uint8)
+            bgr_max = np.array([50, 255, 255], dtype=np.uint8)
             segmentado_cor = cv2.inRange(output, bgr_min, bgr_max)
 
         elif COR == 'verde':
@@ -204,7 +198,7 @@ class Robot:
             segmentado_cor = cv2.inRange(output, hsv_min, hsv_max)
 
         # Aplica Morphology
-        segmentado_cor = cv2.morphologyEx(segmentado_cor,cv2.MORPH_CLOSE,np.ones((7, 7)))
+        segmentado_cor = cv2.morphologyEx(segmentado_cor,cv2.MORPH_CLOSE,np.ones((5, 5)))
         
         return segmentado_cor
 
@@ -258,15 +252,77 @@ class Robot:
         self.velocidade_saida.publish(vel)
         print("Centralizado")
 
+    def encontra_contornos(self, mask):
+        #$ Retorna um conjunto de contornos
+        contornos, arvore = cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        if len(contornos) > 0:
+            self.STATUS["trilhaON"] = True
+            self.STATUS["searchTrilha"] = False
+        else:
+            self.STATUS["trilhaON"] = False
+            self.STATUS["searchTrilha"] = True
 
+        return contornos
 
-    def encontra_trilha(self):
-        # Trabalhar com a imagem segmentado do amarelo
-        # Para descobrir direção e fazer seguidor de linha
-        pass
+    def encontra_centro_contornos(self, contornos):
+        #$ Retorna tupla que é a mediana dos centros
+        X = []
+        Y = []
 
-    def percorre_trilha(self):
-        #! Etapa 1: fazer o robô percorrer a trilha no sentido que adotamos (virar à direita)
+        # Determina o centro dos contornos amarelos
+        for contorno in contornos:
+            M = cv2.moments(contorno)
+
+            # Usando a expressão do centróide
+            if M["m00"] == 0: 
+                M["m00"] = 1
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+            # Exclui pontos mais à esquerda e da parte central superior
+            if (cX > WIDTH//4 and cX < WIDTH//4 * 3 and cY > 350) or (cX > WIDTH//4 * 3 and cY > 305):
+                X.append(cX)
+                Y.append(cY)
+        mediana_X = int(np.median(X))
+        mediana_Y = int(np.median(Y))
+        centro = (mediana_X, mediana_Y)
+
+        return centro
+
+    def percorre_trilha(self, frame):
+        #! Controla processo de manter o robô andando na pista
+        # Segmenta amarelo, acha contornos e obtém o centro
+        mask_amarelo = self.segmenta_cor(frame.copy(), "amarelo")
+        contornos = self.encontra_contornos(mask_amarelo)
+        try:
+            centro = self.encontra_centro_contornos(contornos)
+        except:
+            centro = self.CENTRO_ROBO
+        # Controla direção do robô
+        if centro[0] - self.CENTRO_ROBO[0] > self.tolerancia_giro:
+            self.vel_direita()
+        elif centro[0] - self.CENTRO_ROBO[0] < -self.tolerancia_giro:
+            self.vel_esquerda()
+        else:
+            self.vel_frente()
         
-        #! Etapa 2: configurar para que ele acelere qnd estiver em linha reta
-        pass
+        #! ======================= TESTE ===========================
+        self.draw_crossHair(frame, centro, 5, [0, 255, 0])
+        self.draw_crossHair(frame, self.CENTRO_ROBO, 5, [0, 0, 255])
+        cv2.imshow("TESTE", frame)
+        #! =========================================================
+
+    def vel_frente(self):
+        vel = Twist(Vector3(0.2, 0, 0), Vector3(0, 0, 0))
+        self.velocidade_saida.publish(vel)
+
+    def vel_direita(self):
+        vel = Twist(Vector3(0.1, 0, 0), Vector3(0, 0, -0.1))
+        self.velocidade_saida.publish(vel)
+
+    def vel_esquerda(self):
+        vel = Twist(Vector3(0.1, 0, 0), Vector3(0, 0, 0.1))
+        self.velocidade_saida.publish(vel)
+
+    def gira_direita(self):
+        vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, -0.2))
+        self.velocidade_saida.publish(vel)
