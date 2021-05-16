@@ -53,26 +53,26 @@ class Robot:
         self.visao_aruco = None
 
         self.STATUS = {
-            'trilhaON': True,
-            'searchTrilha': False,
-            'arucoON': False,
-            'searchCreepON': True,
+            'trilhaON': True,                   # faz o robô percorrer a trilha
+            'searchTrilha': False,              # faz o robô girar até achar uma trilha
+            'arucoON': False,                   # ativa o leitor do aruco
+            'searchCreepON': True,              # ativa a detecção do creeper em função da cor
             'searchCreepDetected': False,       # detectou massa de creeper na imagem --> centraliza no Creeper
             'searchCreepConfirmed': False,      # searchCreep detectou q É o id correto: --> pega o Creeper
             'searchCreepMistaked': False,       # searchCreep detectou q não é o id correto: --> volta para trilha
-            'searchBaseON': False,
+            'searchBaseON': False,              # ativa o mobileNet para identificar a base
             'checkpoint': False,                # variável utilizada para gravar informações pontualmente (sem repetições)
         }
 
         self.LOCALIZACOES = {
-            'creeper': None,
-            'base': None,
+            'creeper': None,    # guarda localizacao do Ponto em que o creeper é identificado
+            'base': None,       # guarda localizacao do Ponto em que a base é identificada
         }
 
         self.ALVO = {
-            'centro': None,
-            'distancia': None,
-            'sentidoGiro': None,
+            'centro': None,         # guarda o centro do Alvo (base ou creeper)
+            'distancia': None,      # guarda a distância do Alvo
+            'sentidoGiro': None,    # guarda o sentido inicial do giro para centralizar no alvo
         }
 
         #! LOOPING PRINCIPAL
