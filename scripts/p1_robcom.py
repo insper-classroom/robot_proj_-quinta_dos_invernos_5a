@@ -56,10 +56,12 @@ class Robot:
             'trilhaON': True,
             'searchTrilha': False,
             'arucoON': False,
-            'searchCreepON': False,
-            'searchCreepDetected': False,
-            'searchCreepConfirmed': False,
+            'searchCreepON': True,
+            'searchCreepDetected': False,       # detectou massa de creeper na imagem --> centraliza no Creeper
+            'searchCreepConfirmed': False,      # searchCreep detectou q É o id correto: --> pega o Creeper
+            'searchCreepMistaked': False,       # searchCreep detectou q não é o id correto: --> volta para trilha
             'searchBaseON': False,
+            'checkpoint': False,                # variável utilizada para gravar informações pontualmente (sem repetições)
         }
 
         self.LOCALIZACOES = {
@@ -70,12 +72,8 @@ class Robot:
         self.ALVO = {
             'centro': None,
             'distancia': None,
+            'sentidoGiro': None,
         }
-
-        #% Não sei oq fazem:
-        # tfl = tf2_ros.TransformListener(tf_buffer) #conversao do sistema de coordenadas 
-        # tolerancia = 25
-        
 
         #! LOOPING PRINCIPAL
         r = rospy.Rate(100)
@@ -109,7 +107,6 @@ class Robot:
                 # --> Se achar: Marca posição
                 pass
 
-
         except rospy.ROSInterruptException:
             print("Ocorreu uma exceção com o rospy")
 
@@ -125,7 +122,7 @@ class Robot:
             cv2.imshow("Camera", cv_image_original)
             cv2.waitKey(1)
             self.CENTRO_ROBO = (cv_image_original.shape[1]//2, cv_image_original.shape[0]//2)
-            self.output_img = cv_image_original.copy()
+            # self.output_img = cv_image_original.copy()
 
             HEIGHT = cv_image_original.shape[0]
             WIDTH = cv_image_original.shape[1]
@@ -146,16 +143,13 @@ class Robot:
                 Para que a imagem do Creeper não atrapalhe na detecção da linha, 
                 acredito que tenhamos que analisar os filtros em imagens diferentes.  
                 """
-                segmentado_creeper = self.segmenta_cor(cv_image_original, "azul")  #! Depois, vamos automatizar para escolher a cor da missão
+                segmentado_creeper = self.segmenta_cor(cv_image_original, "verde")  #! Depois, vamos automatizar para escolher a cor da missão
                 self.calcula_area(segmentado_creeper)  # > 800
                 cv2.imshow("seg_creeper", segmentado_creeper)
+                cv2.waitKey(1)
 
 
-                #! CALCULA ÁREA --> se maior q X -> searchCreepDetected =True --> centraliza no creeper e aproxima.
-            
-            # cv2.imshow("Camera", self.output_img)
-            # cv2.waitKey(0)
-            # cv2.destroyAllWindows()
+                #! CALCULA ÁREA --> se maior q X -> searchCreepDetected =True --> centraliza no creeper e aproxima.        
 
         except CvBridgeError as e:
             print('ex', e)      
@@ -217,8 +211,12 @@ class Robot:
         if maior_area > 1000:
             self.STATUS['searchCreepDetected'] = True  #! Faz o robô centralizar E aproximar do creeper
             self.STATUS['trilhaON'] = False #! Faz o robô parar de seguir linha
+            #$ Ativa CHECKPOINT p/ salvar direção de giro
+            self.STATUS['checkpoint'] = True
+
             print(f"Creeper avistado -- {maior_area}")
-            print(f" trilha: {self.STATUS['trilhaON']}")
+            print(f"§=> trilha: {self.STATUS['trilhaON']}")
+
 
         if not maior_contorno is None:
             media = maior_contorno.mean(axis=0)
@@ -228,16 +226,27 @@ class Robot:
 
             # Guarda a posição do centro em ALVOS:
             self.ALVO['centro'] = media[0] #(x,y)
-
+ 
 
         #! DESENHA O CENTRO DA ÁREA NA IMG ORIGINAL
 
     def centraliza_robo(self, alvo):
+        # Guarda a posição inicial do alvo, para retornar para o sentido contrário depois
+        if (alvo[0] > self.CENTRO_ROBO[0]) and self.STATUS['checkpoint']: 
+            # Alvo à direita do robô --> Quer dizer que o robô girará à direita
+            self.ALVO['sentidoGiro'] = 'direita'
+            self.STATUS['checkpoint'] = False
+            print("Registrando direção de giro -- DIREITA")
+
+        elif (alvo[0] < self.CENTRO_ROBO[0]) and self.STATUS['checkpoint']:
+            self.ALVO['sentidoGiro'] = 'esquerda'
+            self.STATUS['checkpoint'] = False
+            print("Registrando direção de giro -- ESQUERDA")
+
+
         # Centraliza o robô, apontando para o creeper
-        print("Centralizar robô com o Alvo")
-
-
-        while (abs(alvo[0] - self.CENTRO_ROBO[0]) >= 20):
+        if (abs(alvo[0] - self.CENTRO_ROBO[0]) >= 20):
+            print("Centralizar robô com o Alvo")
             if (alvo[0] > self.CENTRO_ROBO[0]):
                 # Gira p/ direita
                 vel = Twist(Vector3(0.0,0,0), Vector3(0,0,-0.1))
@@ -246,6 +255,23 @@ class Robot:
                 # Gira p/ esquerda 
                 vel = Twist(Vector3(0.0,0,0), Vector3(0,0,0.1))
                 self.velocidade_saida.publish(vel)
+
+
+        else:
+            vel = Twist(Vector3(0.0,0,0), Vector3(0,0,0))
+            self.velocidade_saida.publish(vel)
+            print("Centralizado")
+            print("Ativar ARUCO!")
+            print(self.ALVO['sentidoGiro'])
+            self.STATUS['arucoON'] = True
+
+            #* O robô ativa o Aruco e tenta ler o id
+            #* Fazer aproximar, caso a leitura do id não seja precisa
+            #* Quando conseguir ler com precisão, decidir oq fazer (caso id Correto e caso id Errado)
+            #* Caso id errado: Fazer girar no sentido oposto ao salvo em self.ALVO['direcaoGiro']
+            #* Caso id correto: 1) Avançar e pegar ou 2) Guardar posição para voltar depois
+
+        #TODO: Fazer o robô voltar para a direção anterior, caso NÃO seja o id do creeper
 
         # PARAR
         vel = Twist(Vector3(0.0,0,0), Vector3(0,0,0))
@@ -314,6 +340,7 @@ class Robot:
     def vel_frente(self):
         vel = Twist(Vector3(0.2, 0, 0), Vector3(0, 0, 0))
         self.velocidade_saida.publish(vel)
+
 
     def vel_direita(self):
         vel = Twist(Vector3(0.1, 0, 0), Vector3(0, 0, -0.1))
