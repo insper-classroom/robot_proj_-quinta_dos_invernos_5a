@@ -23,7 +23,7 @@ import aruco1
 """
 Arquivo para trabalharmos usando classe e orientação a objetos:
 """
-goal = ("blue", 22, "dog")
+goal = ("blue", 12, "dog")
 
 # AMARELO_FAIXA = np.array([255,255,0])
 # VERDE_CREEP = np.array([1,255,2])
@@ -54,7 +54,7 @@ class Robot:
 
         self.STATUS = {
             'trilhaON': True,
-            'arucoON': True,
+            'arucoON': False,
             'searchCreepON': True,
             'searchCreepDetected': False,
             'searchCreepConfirmed': False,
@@ -266,6 +266,7 @@ class Robot:
         vel = Twist(Vector3(0.0,0,0), Vector3(0,0,0))
         self.velocidade_saida.publish(vel)
         print("Centralizado")
+        self.STATUS['arucoON'] = True
 
     def localiza_id(self, frame):
         try:
@@ -274,19 +275,20 @@ class Robot:
             ids = aruco1.roda_todo_frame(frame)
             
             self.ID['comparado'] = ids[0][0]
+            
+            if self.ID['match'] > 200:
+                self.STATUS['searchCreepConfirmed'] = True
+                self.STATUS['searchCreepDetected'] = False
+                print('achou')
 
-            while self.STATUS['searchCreepON']:
-                if self.ID['match'] > 200:
-                    #self.STATUS['searchCreepDetected'] = True
-                    #self.STATUS['searchCreepON'] = False
-                    print('achou')
+            # Se for falso, volta para a pista:
+            else:
+                print('procurando')
+                #self.ID['match'] = 0
 
-                # Se for falso, volta para a pista:
-                else:
-                    self.ID['match'] = 0
-
-                if self.ID['comparado'] == goal[1]:
-                    self.ID['match'] += 1
+            if self.ID['comparado'] == goal[1]:
+                print('opa')
+                self.ID['match'] += 1
         except CvBridgeError as e:
             print('ex', e)  
 

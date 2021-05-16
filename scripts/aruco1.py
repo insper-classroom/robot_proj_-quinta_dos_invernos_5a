@@ -77,12 +77,12 @@ def roda_todo_frame(imagem):
 
 			#-- Print the tag position in camera frame
 			str_position = "Marker x=%4.0f  y=%4.0f  z=%4.0f"%(tvec[0], tvec[1], tvec[2])
-			print(str_position)
+			#print(str_position)
 			cv2.putText(cv_image, str_position, (0, 100), font, 1, (0, 255, 0), 1, cv2.LINE_AA)
 
 			#-- Print the tag position in camera frame
 			str_dist = "Dist aruco=%4.0f  scan=%4.0f"%(distance, scan_dist)
-			print(str_dist)
+			#print(str_dist)
 			cv2.putText(cv_image, str_dist, (0, 15), font, 1, (0, 255, 0), 1, cv2.LINE_AA)
 			
 			j = int((cv_image.shape[1])/2)
