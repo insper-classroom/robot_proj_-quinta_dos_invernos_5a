@@ -19,12 +19,8 @@ from geometry_msgs.msg import Twist, Vector3, Pose, Vector3Stamped
 
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Header
-
-print("EXECUTE ANTES da 1.a vez: ")
-print("wget https://github.com/Insper/robot21.1/raw/main/projeto/ros_projeto/scripts/MobileNetSSD_deploy.caffemodel")
-print("PARA TER OS PESOS DA REDE NEURAL")
-
 import visao_module
+
 
 
 bridge = CvBridge()
@@ -37,7 +33,7 @@ atraso = 1.5E9 # 1 segundo e meio. Em nanossegundos
 
 area = 0.0 # Variavel com a area do maior contorno
 
-# Só usar se os relógios ROS da Raspberry e do Linux desktop estiverem sincronizados. 
+# TransformListener(# Só usar se os relógios ROS da Raspberry e do Linux desktop estiverem sincronizados. 
 # Descarta imagens que chegam atrasadas demais
 check_delay = False 
 
@@ -94,16 +90,12 @@ def roda_todo_frame(imagem):
     
 if __name__=="__main__":
     rospy.init_node("cor")
-
     topico_imagem = "/camera/image/compressed"
-
     recebedor = rospy.Subscriber(topico_imagem, CompressedImage, roda_todo_frame, queue_size=4, buff_size = 2**24)
-
 
     print("Usando ", topico_imagem)
 
     velocidade_saida = rospy.Publisher("/cmd_vel", Twist, queue_size = 1)
-
     tfl = tf2_ros.TransformListener(tf_buffer) #conversao do sistema de coordenadas 
     tolerancia = 25
 
@@ -120,5 +112,3 @@ if __name__=="__main__":
 
     except rospy.ROSInterruptException:
         print("Ocorreu uma exceção com o rospy")
-
-

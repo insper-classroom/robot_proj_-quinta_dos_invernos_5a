@@ -77,6 +77,12 @@ class Robot:
             'avanco': None,         # guarda se o robô avançou ou não até o creep
         }
 
+        self.CLOCK = {
+            'getTime': False,
+            'to': None,
+            'tf': None,
+        }
+
         #! LOOPING PRINCIPAL
         r = rospy.Rate(100)
         while not rospy.is_shutdown():
@@ -93,11 +99,13 @@ class Robot:
             if self.STATUS['trilhaON']:
                 pass
 
-            # if self.STATUS["searchTrilha"]:
-                # --> Faz robô girar para a direita procurando a pista
-                #! ADAPTAR PARA GIRAR NO SENTIDO CONTRÁRIO AO DE GIRO
-                #! PARA O CASO EM QUE CENTRALIZA NO ALVO
-                # self.gira_direita()
+            if self.STATUS["searchTrilha"]:
+
+                if self.STATUS["searchCreepMistaked"]:
+                    self.retorna_para_trilha()
+
+                else:
+                    self.gira_direita()
 
             if self.STATUS['searchCreepDetected']:
             #$ if SearchCreepDetected:
@@ -113,15 +121,34 @@ class Robot:
 
             if self.STATUS['arucoON']:
                 self.STATUS['searchCreepDetected'] = False
+
+                #! Deixar 'to' e 'getTime' juntos à ativação do Mistaked
                 self.STATUS['searchCreepMistaked'] = True
+                self.CLOCK['to'] = rospy.get_time()
+
                 self.STATUS['arucoON'] = False
 
             
             if self.STATUS['searchCreepMistaked'] and not self.STATUS['trilhaON']:
+                self.STATUS['searchCreepON'] = False
+
                 self.retorna_para_trilha() # faz girar no sentido contrário ao self.ALVO['sentidoGiro']
+
                 #! IDENTIFICAR TRILHA 
                 #! --> qnd identificado --> para de girar --> ativa TRILHA ON e desativa MISTAKED
                 #! DESATIVAR o searchCreepON e ativá-lo após alguns segundos
+
+            if self.STATUS['searchCreepMistaked'] and self.STATUS['trilhaON']:
+                #! Robô acabou de voltar a seguir a pista...
+                self.CLOCK['tf'] = rospy.get_time()
+                delta_t = self.CLOCK['tf'] - self.CLOCK['to']
+                print(f"delta_t = {delta_t}")
+                if delta_t > 6:
+                    print("IHUUU")
+                    self.STATUS['searchCreepMistaked'] = False
+                    self.STATUS['searchCreepON'] = True
+
+
             if self.STATUS['searchCreepConfirmed']:
                 # self.captura_creep()
                 # self.vel_frente() #faz o robô avançar
@@ -145,8 +172,19 @@ class Robot:
             self.CENTRO_ROBO = (cv_image_original.shape[1]//2, cv_image_original.shape[0]//2)
             self.output_img = cv_image_original.copy()
 
+            #! ======================= TESTE ===========================
+            cv2.imshow("TESTE", self.output_img)
+            #TODO: Desenhar HUD que sinaliza os status
+            # if searchCreepON: acender bolinha amarela na legenda "searchCreepON"
+            # if "searchCreepDetected": acender bolinha veremlha na legenda "searchCreepDetected"
+
+            cv2.waitKey(1)
+            #! =========================================================
+
             HEIGHT = cv_image_original.shape[0]
             WIDTH = cv_image_original.shape[1]
+
+            # self.searchTrilha(cv_image_original)
 
             if self.STATUS['trilhaON']:
                 #$ Segmenta Amarelo (Trilha) e faz robô andar a trilha
@@ -231,8 +269,8 @@ class Robot:
             if area > maior_area:
                 maior_contorno = cnt
                 maior_area = area
-        
-        if (maior_area > 1000) and  not self.STATUS['searchCreepMistaked']:
+        print(f"AREA -- {maior_area} ")
+        if (maior_area > 800) and  not self.STATUS['searchCreepMistaked']:
             self.STATUS['searchCreepDetected'] = True  #! Faz o robô centralizar E aproximar do creeper
             self.STATUS['trilhaON'] = False #! Faz o robô parar de seguir linha
             #$ Ativa CHECKPOINT p/ salvar direção de giro
@@ -240,6 +278,8 @@ class Robot:
 
             print(f"Creeper avistado -- {maior_area}")
             print(f"§=> trilha: {self.STATUS['trilhaON']}")
+
+            #TODO: Fazer desenhar borda do contorno no Creep OU printar ÁREA
 
 
         if not maior_contorno is None:
@@ -299,25 +339,45 @@ class Robot:
 
         #TODO: Fazer o robô voltar para a direção anterior, caso NÃO seja o id do creeper
 
+    
     def retorna_para_trilha(self):
+        print ("Retornar para pista ")
        
         if self.ALVO['sentidoGiro'] == 'esquerda':
             self.gira_direita()
             self.STATUS['searchTrilha'] = True 
-            self.STATUS['searchCreepMistaked'] = False
+            # self.STATUS['searchCreepMistaked'] = False
             #! Ativa a função que procura a trilha e faz o robô SEGUIR qnd identificar
 
         elif self.ALVO['sentidoGiro'] == 'direita':
             self.gira_esquerda()
             self.STATUS['searchTrilha'] = True 
-            self.STATUS['searchCreepMistaked'] = False
+            # self.STATUS['searchCreepMistaked'] = False
             #! Ativa a função que procura a trilha e faz o robô SEGUIR qnd identificar
 
         else:
             self.vel_tras()
             self.STATUS['searchTrilha'] = True 
-            self.STATUS['searchCreepMistaked'] = False
+            # self.STATUS['searchCreepMistaked'] = False
             #! Ativa a função que procura a trilha e faz o robô SEGUIR qnd identificar
+
+
+
+    def searchTrilha(self, frame):
+        #@ searchTrilha = True
+        mask_amarelo = self.segmenta_cor(frame.copy(), 'amarelo')
+        contornos, arvore = cv2.findContours(mask_amarelo, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+        soma_areas = 0
+
+        for cnt in contornos:
+            area = cv2.contourArea(cnt)
+            soma_areas += area
+
+        # print(f"AREAS_AMARELO: {soma_areas}")
+        if soma_areas > 3000:
+            print("TRILHA DETECTADA!!")
+
 
 
     #@ searchTrilha = True
@@ -327,8 +387,8 @@ class Robot:
         #$ Retorna um conjunto de contornos
         contornos, arvore = cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         if len(contornos) > 0:
-            self.STATUS["trilhaON"] = True
             self.STATUS["searchTrilha"] = False
+            self.STATUS["trilhaON"] = True
         else:
             self.STATUS["trilhaON"] = False
             self.STATUS["searchTrilha"] = True
@@ -367,31 +427,28 @@ class Robot:
         contornos = self.encontra_contornos(mask_amarelo)
         try:
             centro = self.encontra_centro_contornos(contornos)
+            # Controla direção do robô
+            if centro[0] - self.CENTRO_ROBO[0] > self.tolerancia_giro:
+                self.vel_direita()
+                print("Trilha -- DIREITA")
+            elif centro[0] - self.CENTRO_ROBO[0] < -self.tolerancia_giro:
+                self.vel_esquerda()
+                print("Trilha -- ESQUERDA")
+            else:
+                self.vel_frente()
+                print("Trilha -- FRENTE")
+            
+
         except:
-            centro = self.CENTRO_ROBO
-        # Controla direção do robô
-        if centro[0] - self.CENTRO_ROBO[0] > self.tolerancia_giro:
-            self.vel_direita()
-            print("Trilha -- DIREITA")
-        elif centro[0] - self.CENTRO_ROBO[0] < -self.tolerancia_giro:
-            self.vel_esquerda()
-            print("Trilha -- ESQUERDA")
-        else:
-            self.vel_frente()
-            print("Trilha -- FRENTE")
-        
-        #! ======================= TESTE ===========================
-        self.draw_crossHair(self.output_img, centro, 5, [0, 255, 0])
-        self.draw_crossHair(self.output_img, self.CENTRO_ROBO, 5, [0, 0, 255])
-        cv2.imshow("TESTE", self.output_img)
-        #! =========================================================
+            self.STATUS["trilhaON"] = False
+            self.STATUS["searchTrilha"] = True
 
     def vel_parado(self):
         vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0))
         self.velocidade_saida.publish(vel)
 
     def vel_frente(self):
-        vel = Twist(Vector3(0.2, 0, 0), Vector3(0, 0, 0))
+        vel = Twist(Vector3(0.23, 0, 0), Vector3(0, 0, 0))
         self.velocidade_saida.publish(vel)
 
     def vel_tras(self):
@@ -399,17 +456,17 @@ class Robot:
         self.velocidade_saida.publish(vel)
 
     def vel_direita(self):
-        vel = Twist(Vector3(0.1, 0, 0), Vector3(0, 0, -0.1))
+        vel = Twist(Vector3(0.2, 0, 0), Vector3(0, 0, -0.25))
         self.velocidade_saida.publish(vel)
 
     def vel_esquerda(self):
-        vel = Twist(Vector3(0.1, 0, 0), Vector3(0, 0, 0.1))
+        vel = Twist(Vector3(0.2, 0, 0), Vector3(0, 0, 0.25))
         self.velocidade_saida.publish(vel)
 
     def gira_direita(self):
-        vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, -0.2))
+        vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, -0.4))
         self.velocidade_saida.publish(vel)
 
     def gira_esquerda(self):
-        vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0.2))
+        vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0.4))
         self.velocidade_saida.publish(vel)
