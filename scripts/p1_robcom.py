@@ -10,11 +10,13 @@ from nav_msgs.msg import Odometry
 from std_msgs.msg import Float64
 from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import Twist, Vector3, Pose, Vector3Stamped
+import aruco1
 
 
 """
 Arquivo para trabalharmos usando classe e orientação a objetos:
 """
+goal = ("azul", 12, "dog")
 
 # AMARELO_FAIXA = np.array([255,255,0])
 # VERDE_CREEP = np.array([1,255,2])
@@ -124,22 +126,9 @@ class Robot:
                 # --> Faz o robô procurar pelas estações
                 # --> Se achar: Marca posição
                 pass
-
-            if self.STATUS['arucoON']:
-
-                #! CONFIGURAR STATUS p/ IDENTIFICAR ID
-
-                self.STATUS['searchCreepMistaked'] = False
-                self.STATUS['searchCreepConfirmed'] = True
-                self.CLOCK['to'] = rospy.get_time()
-
-                self.STATUS['confirmId'] = False
-                self.STATUS['arucoON'] = False
-
             
             if self.STATUS['searchCreepMistaked'] and not self.STATUS['trilhaON']:
                 self.STATUS['searchCreepON'] = False
-
                 self.STATUS['retornarTrilha'] = True
                 self.retorna_para_trilha() # faz girar no sentido contrário ao self.ALVO['sentidoGiro']
 
@@ -149,6 +138,7 @@ class Robot:
 
             if self.STATUS['searchCreepMistaked'] and self.STATUS['trilhaON']:
                 #! Robô acabou de voltar a seguir a pista...
+                self.STATUS['arucoOn'] = False
                 self.CLOCK['tf'] = rospy.get_time()
                 delta_t = self.CLOCK['tf'] - self.CLOCK['to']
                 print(f"delta_t = {delta_t}")
@@ -157,6 +147,7 @@ class Robot:
                     self.STATUS['searchCreepON'] = True
 
             if self.STATUS['searchCreepConfirmed'] and not self.STATUS['creepCapturado']:
+                self.STATUS['arucoON'] = False
                 self.CLOCK['tf'] = rospy.get_time()
                 delta_t = self.CLOCK['tf'] - self.CLOCK['to']
                 print(f"delta_t = {delta_t:.4f}")
@@ -248,13 +239,19 @@ class Robot:
                 Para que a imagem do Creeper não atrapalhe na detecção da linha, 
                 acredito que tenhamos que analisar os filtros em imagens diferentes.  
                 """
-                segmentado_creeper = self.segmenta_cor(cv_image_original, "azul")  #! Depois, vamos automatizar para escolher a cor da missão
+                segmentado_creeper = self.segmenta_cor(cv_image_original, goal[0])  #! Depois, vamos automatizar para escolher a cor da missão
                 self.calcula_area(segmentado_creeper)  # > 800
                 cv2.imshow("seg_creeper", segmentado_creeper)
                 cv2.waitKey(1)
 
                 #! CALCULA ÁREA --> se maior q X -> confirmId =True --> centraliza no creeper e aproxima.        
-            
+            if self.STATUS['arucoON']:
+
+                #! CONFIGURAR STATUS p/ IDENTIFICAR ID
+                self.localiza_id(frame)
+                self.CLOCK['to'] = rospy.get_time()
+                self.STATUS['confirmId'] = False
+
         except CvBridgeError as e:
             print('ex', e)  
 
@@ -407,6 +404,7 @@ class Robot:
             self.velocidade_saida.publish(vel)
     
     def retorna_para_trilha(self):
+        self.STATUS['arucoOn'] = False
         print ("Retornar para pista ")
         self.STATUS['searchTrilha'] = True  #! Ativa função encontro_contornos
        
@@ -503,6 +501,25 @@ class Robot:
         except:
             self.STATUS["trilhaON"] = False
             self.STATUS["searchTrilha"] = True
+
+    def localiza_id(self, frame):
+        ids = aruco1.roda_todo_frame(frame)
+
+        try:
+            if ids is not None:
+            
+                if ids[0][0] == goal[1]:
+                    self.STATUS['searchCreepConfirmed'] = True
+                    print('achou ID')
+
+
+                # Se for falso, volta para a pista:
+                else:
+                    print('não achou')
+                    self.STATUS['searchCreepMistaked'] = True
+
+        except CvBridgeError as e:
+            print('ex', e)
 
     def vel_parado(self):
         vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0))

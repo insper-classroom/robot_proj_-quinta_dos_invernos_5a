@@ -14,13 +14,7 @@ from cv_bridge import CvBridge, CvBridgeError
 import cv2.aruco as aruco
 import sys
 
-#--- Define Tag de teste
-id_to_find  = 200
 marker_size  = 25 #- [cm]
-#id_to_find  = 22
-#marker_size  = 3 #- [cm]
-# 
-
 
 #--- Get the camera calibration path
 calib_path  = "/home/borg/catkin_ws/src/robot202/ros/exemplos202/scripts/"
@@ -57,9 +51,10 @@ def roda_todo_frame(imagem):
 		#cv_image = cv2.resize(cv_image,(cv_image.shape[1]*2,cv_image.shape[0]*2)) # resize image se necessario
 		
 		gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+		gray = gray[210:260, 270:330]
 		corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
 		
-		if ids is not None and ids[0] == id_to_find :
+		if ids is not None:
 			#-- ret = [rvec, tvec, ?]
 			#-- array of rotation and position of each marker in camera frame
 			#-- rvec = [[rvec_1], [rvec_2], ...]    attitude of the marker respect to camera frame
@@ -75,31 +70,38 @@ def roda_todo_frame(imagem):
 			
 			# Calculo usando distancia Euclidiana 
 			distance = np.sqrt(tvec[0]**2 + tvec[1]**2 + tvec[2]**2)
+			print(distance)
 
 			#-- Print the tag position in camera frame
 			str_position = "Marker x=%4.0f  y=%4.0f  z=%4.0f"%(tvec[0], tvec[1], tvec[2])
-			print(str_position)
+			#print(str_position)
 			cv2.putText(cv_image, str_position, (0, 100), font, 1, (0, 255, 0), 1, cv2.LINE_AA)
 
 			#-- Print the tag position in camera frame
 			str_dist = "Dist aruco=%4.0f  scan=%4.0f"%(distance, scan_dist)
-			print(str_dist)
+			#print(str_dist)
 			cv2.putText(cv_image, str_dist, (0, 15), font, 1, (0, 255, 0), 1, cv2.LINE_AA)
-
+			
+			j = int((cv_image.shape[1])/2)
+			i = int((cv_image.shape[0])/2)
 			# Linha referencia em X
-			cv2.line(cv_image, (cv_image.shape[1]/2,cv_image.shape[0]/2), ((cv_image.shape[1]/2 + 50),(cv_image.shape[0]/2)), (0,0,255), 5) 
+			cv2.line(cv_image, (j,i), ((j + 50),i), (0,0,255), 5) 
 			# Linha referencia em Y
-			cv2.line(cv_image, (cv_image.shape[1]/2,cv_image.shape[0]/2), (cv_image.shape[1]/2,(cv_image.shape[0]/2 + 50)), (0,255,0), 5) 	
+			cv2.line(cv_image, (j,i), (j,(i + 50)), (0,255,0), 5) 	
 
 
 			cv2.putText(cv_image, "%.1f cm -- %.0f deg" % ((tvec[2]), (rvec[2] / 3.1415 * 180)), (0, 230), font, 1, (244, 244, 244), 1, cv2.LINE_AA)
+		
+			ids = ids.tolist()
 
 		# Exibe tela
 		cv2.imshow("Camera", cv_image)
 		cv2.waitKey(1)
 	except CvBridgeError as e:
 		print('ex', e)
-	
+
+	return ids 
+
 if __name__=="__main__":
 	rospy.init_node("aruco")
 
