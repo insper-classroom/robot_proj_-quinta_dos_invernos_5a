@@ -19,11 +19,13 @@ from nav_msgs.msg import Odometry
 from std_msgs.msg import Header
 import visao_module
 import aruco1
+from sensor_msgs.msg import LaserScan
+
 
 """
 Arquivo para trabalharmos usando classe e orientação a objetos:
 """
-goal = ("blue", 12, "dog")
+goal = ("azul", 12, "dog")
 
 # AMARELO_FAIXA = np.array([255,255,0])
 # VERDE_CREEP = np.array([1,255,2])
@@ -78,12 +80,6 @@ class Robot:
             'avanco': None,         # guarda se o robô avançou ou não até o creep
         }
 
-        self.ID = {
-            'ids': None,
-            'comparado': 0,
-            'match': 0,
-        }
-
         #! LOOPING PRINCIPAL
         r = rospy.Rate(100)
         while not rospy.is_shutdown():
@@ -120,11 +116,13 @@ class Robot:
             
             if self.STATUS['searchCreepMistaked'] and not self.STATUS['trilhaON']:
                 self.retorna_para_trilha() # faz girar no sentido contrário ao self.ALVO['sentidoGiro']
+                self.STATUS['arucoON'] = False
                 #! IDENTIFICAR TRILHA 
                 #! --> qnd identificado --> para de girar --> ativa TRILHA ON e desativa MISTAKED
                 #! DESATIVAR o searchCreepON e ativá-lo após alguns segundos
             if self.STATUS['searchCreepConfirmed']:
-                # self.captura_creep()
+                self.STATUS['arucoON'] = False
+                #self.captura_creep()
                 # self.vel_frente() #faz o robô avançar
 
                 #TODO: Fazer o robô PEGAR o Creep e VOLTAR para pista
@@ -165,7 +163,7 @@ class Robot:
                 Para que a imagem do Creeper não atrapalhe na detecção da linha, 
                 acredito que tenhamos que analisar os filtros em imagens diferentes.  
                 """
-                segmentado_creeper = self.segmenta_cor(cv_image_original, "verde")  #! Depois, vamos automatizar para escolher a cor da missão
+                segmentado_creeper = self.segmenta_cor(cv_image_original, goal[0])  #! Depois, vamos automatizar para escolher a cor da missão
                 self.calcula_area(segmentado_creeper)  # > 800
                 cv2.imshow("seg_creeper", segmentado_creeper)
                 cv2.waitKey(1)
@@ -174,7 +172,6 @@ class Robot:
             if self.STATUS["arucoON"]:
                 self.localiza_id(frame)
                 self.STATUS['searchCreepDetected'] = False
-                self.STATUS['searchCreepMistaked'] = True
                 
 
         except CvBridgeError as e:
@@ -418,25 +415,36 @@ class Robot:
         self.velocidade_saida.publish(vel)
 
     def localiza_id(self, frame):
+        ids = aruco1.roda_todo_frame(frame)
+        ids[0][0]
         try:
             #cv_image_original = self.bridge.compressed_imgmsg_to_cv2(frame, "bgr8")
             #aruco_image = cv_image_original.copy()
-            ids = aruco1.roda_todo_frame(frame)
             
-            self.ID['comparado'] = ids[0][0]
-            
-            if self.ID['match'] > 200:
+            if ids[0][0] == goal[1]:
                 self.STATUS['searchCreepConfirmed'] = True
-                print('achou')
+                print('achou ID')
+
 
             # Se for falso, volta para a pista:
             else:
-                print('procurando')
-                #self.ID['match'] = 0
+                print('não achou')
+                self.STATUS['searchCreepMistaked'] = True
 
-            if self.ID['comparado'] == goal[1]:
-                print('opa')
-                self.ID['match'] += 1
         except CvBridgeError as e:
             print('ex', e)
 
+""" 
+    def captura_creep(self):
+
+
+        if (alvo[0] > self.CENTRO_ROBO[0]):
+                # Gira p/ direita
+                vel = Twist(Vector3(0.0,0,0), Vector3(0,0,-0.1))
+                self.velocidade_saida.publish(vel)
+        else:
+            # Gira p/ esquerda 
+            vel = Twist(Vector3(0.0,0,0), Vector3(0,0,0.1))
+            self.velocidade_saida.publish(vel)
+
+"""

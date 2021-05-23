@@ -57,7 +57,9 @@ def roda_todo_frame(imagem):
 		#cv_image = cv2.resize(cv_image,(cv_image.shape[1]*2,cv_image.shape[0]*2)) # resize image se necessario
 		
 		gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+		gray = gray[210:260, 270:330]
 		corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+		
 		if ids is not None:
 			#-- ret = [rvec, tvec, ?]
 			#-- array of rotation and position of each marker in camera frame
@@ -74,6 +76,7 @@ def roda_todo_frame(imagem):
 			
 			# Calculo usando distancia Euclidiana 
 			distance = np.sqrt(tvec[0]**2 + tvec[1]**2 + tvec[2]**2)
+			print(distance)
 
 			#-- Print the tag position in camera frame
 			str_position = "Marker x=%4.0f  y=%4.0f  z=%4.0f"%(tvec[0], tvec[1], tvec[2])
@@ -94,7 +97,12 @@ def roda_todo_frame(imagem):
 
 
 			cv2.putText(cv_image, "%.1f cm -- %.0f deg" % ((tvec[2]), (rvec[2] / 3.1415 * 180)), (0, 230), font, 1, (244, 244, 244), 1, cv2.LINE_AA)
-			ids = ids.tolist()
+		
+		ids = ids.tolist()
+		print(corners)
+		print(ids)
+		print(int(cv_image.shape[0]), int(cv_image.shape[1]))
+
 
 		# Exibe tela
 		cv2.imshow("Camera", cv_image)
