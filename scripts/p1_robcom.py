@@ -128,6 +128,7 @@ class Robot:
                 pass
             
             if self.STATUS['searchCreepMistaked'] and not self.STATUS['trilhaON']:
+                self.STATUS['arucoON'] = False
                 self.STATUS['searchCreepON'] = False
                 self.STATUS['retornarTrilha'] = True
                 self.retorna_para_trilha() # faz girar no sentido contrário ao self.ALVO['sentidoGiro']
@@ -138,7 +139,7 @@ class Robot:
 
             if self.STATUS['searchCreepMistaked'] and self.STATUS['trilhaON']:
                 #! Robô acabou de voltar a seguir a pista...
-                self.STATUS['arucoOn'] = False
+                self.STATUS['arucoON'] = False
                 self.CLOCK['tf'] = rospy.get_time()
                 delta_t = self.CLOCK['tf'] - self.CLOCK['to']
                 print(f"delta_t = {delta_t}")
@@ -160,8 +161,9 @@ class Robot:
                     #! Checar se ele faz os dois ao mesmo tempo
 
                 if self.STATUS['garraPosicionada'] and not self.STATUS['creepProximo']: #* previne q o robô ande p/ frente sem desejarmos
-                    print(self.distancias[0])
-                    if self.distancias[0] > 0.18 : 
+                    print(self.distancias[358], self.distancias[0], self.distancias[2])
+
+                    if self.distancias[0] > 0.19 and self.distancias[358] > 0.19 and self.distancias[2] > 0.19: 
                         self.aproxima_creeper(self.ALVO['centro'])
                     else:                    
                         self.STATUS['creepProximo'] = True
@@ -200,7 +202,7 @@ class Robot:
         """ 
         Função assíncrona de Callback, é chamada toda vez pelo Subscriber 
         """
-
+        print(self.distancias[359], self.distancias[0], self.distancias[1])
         try:
             #$ Exibe Imagem Originaloutput_img
             cv_image_original = self.bridge.compressed_imgmsg_to_cv2(frame, "bgr8")
@@ -246,11 +248,11 @@ class Robot:
 
                 #! CALCULA ÁREA --> se maior q X -> confirmId =True --> centraliza no creeper e aproxima.        
             if self.STATUS['arucoON']:
-
+                #! configurar um deltaT para chamar o localiza_id
                 #! CONFIGURAR STATUS p/ IDENTIFICAR ID
                 self.localiza_id(frame)
                 self.CLOCK['to'] = rospy.get_time()
-                self.STATUS['confirmId'] = False
+                self.STATUS['confirmId'] = False 
 
         except CvBridgeError as e:
             print('ex', e)  
@@ -404,7 +406,7 @@ class Robot:
             self.velocidade_saida.publish(vel)
     
     def retorna_para_trilha(self):
-        self.STATUS['arucoOn'] = False
+        self.STATUS['arucoON'] = False
         print ("Retornar para pista ")
         self.STATUS['searchTrilha'] = True  #! Ativa função encontro_contornos
        
