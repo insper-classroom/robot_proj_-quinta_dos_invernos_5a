@@ -11,12 +11,13 @@ from std_msgs.msg import Float64
 from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import Twist, Vector3, Pose, Vector3Stamped
 import aruco1
+import mobilenet_simples
 
 
 """
 Arquivo para trabalharmos usando classe e orientação a objetos:
 """
-goal = ("azul", 12, "dog")
+goal = ("azul", 12, "horse")
 
 # AMARELO_FAIXA = np.array([255,255,0])
 # VERDE_CREEP = np.array([1,255,2])
@@ -120,12 +121,6 @@ class Robot:
                 # --> Faz o robô confirmar se o creeper avistado é da id desejada
                 # --> Se achar: (1) - Marca posição; (2) - Vai até ele e pega
                 self.centraliza_robo(self.ALVO['centro'])
-
-            if self.STATUS['searchBaseON']:
-                #$ if SearchBaseON:
-                # --> Faz o robô procurar pelas estações
-                # --> Se achar: Marca posição
-                pass
             
             if self.STATUS['searchCreepMistaked'] and not self.STATUS['trilhaON']:
                 self.STATUS['arucoON'] = False
@@ -190,6 +185,7 @@ class Robot:
                     self.STATUS['alinhamentoOK'] = False
 
                     self.STATUS['retornarTrilha'] = True
+                    self.STATUS['searchBaseON'] = True
                     self.retorna_para_trilha()
                 
                 #TODO: Fazer o robô PEGAR o Creep e VOLTAR para pista
@@ -251,6 +247,11 @@ class Robot:
                 #! configurar um deltaT para chamar o localiza_id
                 #! CONFIGURAR STATUS p/ IDENTIFICAR ID
                 self.localiza_id(frame)
+                self.CLOCK['to'] = rospy.get_time()
+                self.STATUS['confirmId'] = False 
+
+            if self.STATUS['searchBaseON']:
+                self.localiza_base(frame)
                 self.CLOCK['to'] = rospy.get_time()
                 self.STATUS['confirmId'] = False 
 
@@ -519,6 +520,25 @@ class Robot:
                 else:
                     print('não achou')
                     self.STATUS['searchCreepMistaked'] = True
+
+        except CvBridgeError as e:
+            print('ex', e)
+
+    def localiza_base(self, frame):
+        imagem, results = mobilenet_simples.detect(frame)
+
+        try:
+            if results is not None:
+            
+                if results[0][0] == goal[2]:
+                    #self.STATUS['searchCreepConfirmed'] = True
+                    print('achou base')
+
+
+                # Se for falso, volta para a pista:
+                else:
+                    print('não achou base')
+                    #self.STATUS['searchCreepMistaked'] = True
 
         except CvBridgeError as e:
             print('ex', e)
