@@ -71,7 +71,10 @@ class Robot:
                 'creepCapturado': False,            #* fecha garra e levante o ombro
             'retornarTrilha': False,
             'searchBaseON': True,              # ativa o mobileNet para identificar a base
+                'searchBaseConfirmed': False,
+                'aproximaBase': False,
             'checkpoint': False,                # variável utilizada para gravar informações pontualmente (sem repetições)
+        
         }
 
         self.LOCALIZACOES = {
@@ -190,6 +193,19 @@ class Robot:
                 
                 #TODO: Fazer o robô PEGAR o Creep e VOLTAR para pista
                 pass
+
+            if self.STATUS['searchBaseConfirmed']:
+                # centraliza com o alvo
+                self.STATUS['trilhaON'] = False
+                self.centraliza_robo(self.ALVO['centro'])
+
+            if self.STATUS['aproximaBase']:
+                if self.distancias[0] >= 0.5:
+                    self.aproxima_creeper(self.ALVO['centro'])
+                else:
+                    self.vel_parado()
+                    #! ativar proximo status: 1. abaixar ombro 2. abrir garra 
+
         except rospy.ROSInterruptException:
             print("Ocorreu uma exceção com o rospy")
 
@@ -382,6 +398,11 @@ class Robot:
                 print(self.ALVO['sentidoGiro'])
                 self.STATUS['arucoON'] = True
 
+            elif self.STATUS['searchBaseConfirmed']:
+                print('Centralizado')
+                self.STATUS['searchBaseConfirmed'] = False
+                self.STATUS['aproximaBase'] = True
+
             #* O robô ativa o Aruco e tenta ler o id
             #* Fazer aproximar, caso a leitura do id não seja precisa
             #* Quando conseguir ler com precisão, decidir oq fazer (caso id Correto e caso id Errado)
@@ -530,8 +551,9 @@ class Robot:
         try:
             if len(results) > 0:
             
-                if results[0][0] == goal[2] and result[0][1] >= thresholds[goal[1]]:
-                    self.STATUS['dropCreep'] = True
+                if results[0][0] == goal[2] and results[0][1] >= thresholds[goal[2]]:
+                    self.STATUS['searchBaseConfirmed'] = True
+                    self.ALVO['centro'] = (((results[0][2][0] + results[0][3][0])//2), ((results[0][2][1] + results[0][3][1])//2))
                     print('achou base')
 
                 # Se for falso, volta para a pista:
