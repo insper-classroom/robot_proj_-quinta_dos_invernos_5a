@@ -20,7 +20,7 @@ scripts = os.path.join(path,  "scripts")
 
 proto = os.path.join(scripts,"MobileNetSSD_deploy.prototxt.txt")
 model = os.path.join(scripts, "MobileNetSSD_deploy.caffemodel")
-confianca = 0.2
+confianca = 0.8
 
 
 # initialize the list of class labels MobileNet SSD was trained to
@@ -83,6 +83,7 @@ def detect(frame):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS[idx], 2)
 
                 results.append((CLASSES[idx], confidence*100, (startX, startY),(endX, endY) ))
+                print(results)
         # show the output image
     except CvBridgeError as e:
         print('ex', e)

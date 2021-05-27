@@ -58,7 +58,7 @@ class Robot:
             'searchTrilha': False,              # faz o robô girar à direita até achar uma trilha
             
             'arucoON': False,                   # ativa o leitor do aruco
-            'searchCreepON': True,              # ativa a detecção do creeper em função da cor
+            'searchCreepON': False,              # ativa a detecção do creeper em função da cor
                 'confirmId': False,             # detectou massa de creeper na imagem --> 1) Deixa de Seguir Trilha, 2) Centraliza, 3) investiga se é do id desejado
                 'searchCreepMistaked': False,       # confirmId detectou q não é o id correto: --> volta para trilha
                     #! limpar dados em self.ALVO
@@ -70,7 +70,7 @@ class Robot:
 
                 'creepCapturado': False,            #* fecha garra e levante o ombro
             'retornarTrilha': False,
-            'searchBaseON': False,              # ativa o mobileNet para identificar a base
+            'searchBaseON': True,              # ativa o mobileNet para identificar a base
             'checkpoint': False,                # variável utilizada para gravar informações pontualmente (sem repetições)
         }
 
@@ -507,7 +507,6 @@ class Robot:
 
     def localiza_id(self, frame):
         ids = aruco1.roda_todo_frame(frame)
-
         try:
             if ids is not None:
             
@@ -526,19 +525,18 @@ class Robot:
 
     def localiza_base(self, frame):
         imagem, results = mobilenet_simples.detect(frame)
+        thresholds = {"dog": 99, "horse": 99, "car": 99, "cow": 80}
 
         try:
-            if results is not None:
+            if len(results) > 0:
             
-                if results[0][0] == goal[2]:
-                    #self.STATUS['searchCreepConfirmed'] = True
+                if results[0][0] == goal[2] and result[0][1] >= thresholds[goal[1]]:
+                    self.STATUS['dropCreep'] = True
                     print('achou base')
-
 
                 # Se for falso, volta para a pista:
                 else:
                     print('não achou base')
-                    #self.STATUS['searchCreepMistaked'] = True
 
         except CvBridgeError as e:
             print('ex', e)
