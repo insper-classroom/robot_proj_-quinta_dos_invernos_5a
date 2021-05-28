@@ -83,7 +83,6 @@ def detect(frame):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS[idx], 2)
 
                 results.append((CLASSES[idx], confidence*100, (startX, startY),(endX, endY) ))
-                print(results)
         # show the output image
     except CvBridgeError as e:
         print('ex', e)

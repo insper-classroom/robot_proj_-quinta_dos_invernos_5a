@@ -58,7 +58,7 @@ class Robot:
             'searchTrilha': False,              # faz o robô girar à direita até achar uma trilha
             
             'arucoON': False,                   # ativa o leitor do aruco
-            'searchCreepON': False,              # ativa a detecção do creeper em função da cor
+            'searchCreepON': True,              # ativa a detecção do creeper em função da cor
                 'confirmId': False,             # detectou massa de creeper na imagem --> 1) Deixa de Seguir Trilha, 2) Centraliza, 3) investiga se é do id desejado
                 'searchCreepMistaked': False,       # confirmId detectou q não é o id correto: --> volta para trilha
                     #! limpar dados em self.ALVO
@@ -70,9 +70,11 @@ class Robot:
 
                 'creepCapturado': False,            #* fecha garra e levante o ombro
             'retornarTrilha': False,
-            'searchBaseON': True,              # ativa o mobileNet para identificar a base
-                'searchBaseConfirmed': False,
-                'aproximaBase': False,
+            'searchBaseON': False,               # ativa o mobileNet para identificar a base
+                'searchBaseConfirmed': False,   # faz o robô centralizar com a base identificada
+                'aproximaBase': False,          # faz o robô se aproximar da base, centralizando-se
+                'deployCreep': False,           # faz o robô dar deploy do creeper
+                'creepDeployed': False,         # faz o robô se afastar da base e procurar a Trilha novamente
             'checkpoint': False,                # variável utilizada para gravar informações pontualmente (sem repetições)
         
         }
@@ -151,7 +153,7 @@ class Robot:
                 delta_t = self.CLOCK['tf'] - self.CLOCK['to']
                 print(f"delta_t = {delta_t:.4f}")
 
-                # Espera 2 segundos parado, para posicionar a garra e avançar
+                # Espera 1 segundo parado, para posicionar a garra e avançar
                 if delta_t > 1 and not self.STATUS['garraPosicionada']:
                     self.ombro.publish(-0.4)    # levanta o ombro parcialmente
                     self.garra.publish(-1)      # abre a garra
@@ -162,7 +164,8 @@ class Robot:
                     print(self.distancias[358], self.distancias[0], self.distancias[2])
 
                     if self.distancias[0] > 0.19 and self.distancias[358] > 0.19 and self.distancias[2] > 0.19: 
-                        self.aproxima_creeper(self.ALVO['centro'])
+                        #<> PRECISA SER REFINADO!!!!! 
+                        self.aproxima_alvo_centralizando(self.ALVO['centro'])
                     else:                    
                         self.STATUS['creepProximo'] = True
                         self.vel_parado()
@@ -178,6 +181,7 @@ class Robot:
                         self.ombro.publish(1.5)  
                         self.STATUS['creepCapturado'] = True
                         print("CREEP CAPTURADO COM SUCESSO!")
+                        self.CLOCK['to'] = rospy.get_time()
 
 
                 if self.STATUS['creepCapturado']:
@@ -188,24 +192,57 @@ class Robot:
                     self.STATUS['alinhamentoOK'] = False
 
                     self.STATUS['retornarTrilha'] = True
-                    self.STATUS['searchBaseON'] = True
-                    self.retorna_para_trilha()
+                    self.STATUS['searchTrilha'] = True
+
+                    self.CLOCK['tf'] = rospy.get_time()
+                    delta_t = self.CLOCK['tf'] - self.CLOCK['to']
+                    if delta_t > 1:
+                        self.STATUS['searchBaseON'] = True
                 
-                #TODO: Fazer o robô PEGAR o Creep e VOLTAR para pista
-                pass
+            #@ searchBaseON (trataFrame)
 
             if self.STATUS['searchBaseConfirmed']:
-                # centraliza com o alvo
+                # deixa de seguir trilha e centraliza com o alvo
                 self.STATUS['trilhaON'] = False
                 self.centraliza_robo(self.ALVO['centro'])
 
             if self.STATUS['aproximaBase']:
-                if self.distancias[0] >= 0.5:
-                    self.aproxima_creeper(self.ALVO['centro'])
+                self.STATUS['searchBaseConfirmed'] = False
+
+                if self.distancias[0] >= 0.4:
+                    self.aproxima_alvo_centralizando(self.ALVO['centro'])
+                    # <> CHECAR SE A MOBILENET funciona EM TODA APROXIMACAO
                 else:
+                    # robô próximo da base --> fica parado
                     self.vel_parado()
+                    self.STATUS['searchBaseON'] = False
+                    self.STATUS['aproximaBase'] = False
+                    self.STATUS['deployCreep'] = True 
+                    self.CLOCK['to'] = rospy.get_time()
+                    print("Robô próximo da Base -- Deploy Creeper!!")
                     #! ativar proximo status: 1. abaixar ombro 2. abrir garra 
 
+            if self.STATUS['deployCreep']:
+                self.CLOCK['tf'] = rospy.get_time()
+                delta_t = self.CLOCK['tf'] - self.CLOCK['to']
+                print(f"delta_t = {delta_t}")
+                if delta_t > 0.5 and delta_t < 1.0:
+                    self.ombro.publish(-0.4)
+
+                elif delta_t > 2.0 and delta_t < 2.5:
+                    self.garra.publish(-1)
+
+                elif delta_t > 2.5:
+                    self.ombro.publish(-1.0)
+                    self.STATUS['creepDeployed'] = True
+                    self.STATUS['searchTrilha'] = True
+                    self.STATUS['retornarTrilha'] = True
+                    self.STATUS['deployCreep'] = False
+
+            if self.STATUS['creepDeployed']:
+                self.retorna_para_trilha()
+
+                
         except rospy.ROSInterruptException:
             print("Ocorreu uma exceção com o rospy")
 
@@ -214,7 +251,7 @@ class Robot:
         """ 
         Função assíncrona de Callback, é chamada toda vez pelo Subscriber 
         """
-        print(self.distancias[359], self.distancias[0], self.distancias[1])
+        
         try:
             #$ Exibe Imagem Originaloutput_img
             cv_image_original = self.bridge.compressed_imgmsg_to_cv2(frame, "bgr8")
@@ -259,6 +296,7 @@ class Robot:
                 cv2.waitKey(1)
 
                 #! CALCULA ÁREA --> se maior q X -> confirmId =True --> centraliza no creeper e aproxima.        
+            
             if self.STATUS['arucoON']:
                 #! configurar um deltaT para chamar o localiza_id
                 #! CONFIGURAR STATUS p/ IDENTIFICAR ID
@@ -268,8 +306,6 @@ class Robot:
 
             if self.STATUS['searchBaseON']:
                 self.localiza_base(frame)
-                self.CLOCK['to'] = rospy.get_time()
-                self.STATUS['confirmId'] = False 
 
         except CvBridgeError as e:
             print('ex', e)  
@@ -360,8 +396,9 @@ class Robot:
         #! DESENHA O CENTRO DA ÁREA NA IMG ORIGINAL
 
     def centraliza_robo(self, alvo):
+       
         #@ chamada1: qnd confirmId = True --> é desativado após confirmar / refutar
-
+        #@ chamada2: qnd searchBaseConfirmed = True --> é desativado qnd começa a aproximar da Base
         if self.STATUS['checkpoint']:
             # Guarda a posição inicial do alvo, para retornar para o sentido contrário depois
             if (alvo[0] > self.CENTRO_ROBO[0]): 
@@ -382,24 +419,24 @@ class Robot:
                 # print("Centralizar robô com o Alvo")
                 if (alvo[0] > self.CENTRO_ROBO[0]):
                     # Gira p/ direita
+                    print("    Centralizando robô com o alvo -> ")
                     vel = Twist(Vector3(0.0,0,0), Vector3(0,0,-0.1))
                     self.velocidade_saida.publish(vel)
                 else:
                     # Gira p/ esquerda 
+                    print(" <- Centralizando robô com o alvo    ")
                     vel = Twist(Vector3(0.0,0,0), Vector3(0,0,0.1))
                     self.velocidade_saida.publish(vel)
 
         else:
             vel = Twist(Vector3(0.0,0,0), Vector3(0,0,0))
             self.velocidade_saida.publish(vel)
+            print(" -- Centralizado! -- ")
             if self.STATUS['confirmId']:
-                print("Centralizado")
                 print("Ativar ARUCO!")
-                print(self.ALVO['sentidoGiro'])
                 self.STATUS['arucoON'] = True
 
             elif self.STATUS['searchBaseConfirmed']:
-                print('Centralizado')
                 self.STATUS['searchBaseConfirmed'] = False
                 self.STATUS['aproximaBase'] = True
 
@@ -411,19 +448,22 @@ class Robot:
 
         #TODO: Fazer o robô voltar para a direção anterior, caso NÃO seja o id do creeper
 
-    def aproxima_creeper(self, alvo):
+    def aproxima_alvo_centralizando(self, alvo):
         if (abs(alvo[0] - self.CENTRO_ROBO[0]) >= 20):
                 # Rotaciona E Avança
                 if (alvo[0] > self.CENTRO_ROBO[0]):
                     # Gira p/ direita
+                    print("\t    \t d:", self.distancias[0], "\t -->")
                     vel = Twist(Vector3(0.1,0,0), Vector3(0,0,-0.1))
                     self.velocidade_saida.publish(vel)
                 else:
                     # Gira p/ esquerda 
+                    print("\t <-- \t d:", self.distancias[0])
                     vel = Twist(Vector3(0.1,0,0), Vector3(0,0,0.1))
                     self.velocidade_saida.publish(vel)
 
         else:
+            print("d:", self.distancias[0],  "\t  ==")
             vel = Twist(Vector3(0.1,0,0), Vector3(0,0,0.1))
             self.velocidade_saida.publish(vel)
     
@@ -545,20 +585,29 @@ class Robot:
             print('ex', e)
 
     def localiza_base(self, frame):
+        #@ chamado qnd searchBaseON = True --> desativa somente qnd próx. da base
         imagem, results = mobilenet_simples.detect(frame)
-        thresholds = {"dog": 99, "horse": 99, "car": 99, "cow": 80}
+        thresholds = {"dog": 90, "horse": 90, "car": 90, "cow": 80}
 
         try:
             if len(results) > 0:
+                if results[0][0] == goal[2]:
+                    print(f"HORSE: -- {results[0][1]}")
             
                 if results[0][0] == goal[2] and results[0][1] >= thresholds[goal[2]]:
-                    self.STATUS['searchBaseConfirmed'] = True
                     self.ALVO['centro'] = (((results[0][2][0] + results[0][3][0])//2), ((results[0][2][1] + results[0][3][1])//2))
-                    print('achou base')
+                    
+                    if not self.STATUS['searchBaseConfirmed']: 
+                        # ativa o Checkpoint apenas uma vez, qnd chamar centraliza_robo.
+                        self.STATUS['checkpoint'] = True
+                    
+                    if not self.STATUS['aproximaBase']: # evita que o searchBaseConfirmed seja reativado
+                        self.STATUS['searchBaseConfirmed'] = True
+                        print(f'Base [{results[0][0]}] detectada!')
 
                 # Se for falso, volta para a pista:
                 else:
-                    print('não achou base')
+                    print('Procurando Base...')
 
         except CvBridgeError as e:
             print('ex', e)
