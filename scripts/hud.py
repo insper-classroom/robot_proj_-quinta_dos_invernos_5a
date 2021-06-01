@@ -24,7 +24,7 @@ def drawHUD(output_img, status, infos):
     CENTER_Y = output_img.shape[0]//2
 
     # DESENHA CROSSHAIR NO CENTRO e TOLERANCIA EM X:
-    if infos['cm_trilha'] is not None:
+    if infos['cm_trilha'] is not None and status['trilhaON']:
         delta_x = infos['cm_trilha'][0] - CENTER_X
         if delta_x > 0:
             cv2.line(output_img, (CENTER_X, CENTER_Y), (CENTER_X + delta_x, CENTER_Y), color=DARK_BLUE, thickness=2)
@@ -47,7 +47,7 @@ def drawHUD(output_img, status, infos):
         contagem += 1
             
     # PRINTA A VELOCIDADE (v e w)
-    if infos['v'] is not None and infos['w'] is not None:
+    if infos['v'] is not None and infos['w'] is not None and status['trilhaON']:
         drawText(output_img, f"v= {infos['v']:.3f} w= {infos['w']:.3f}", posicao=(400, 460), size=0.6, width=2)
 
     # DESENHA UM CIRCULO NO CENTRO DO CREEPER:

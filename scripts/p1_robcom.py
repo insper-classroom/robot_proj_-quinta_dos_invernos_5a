@@ -17,14 +17,11 @@ import statsmodels.api as sm
 from math import atan, pi
 
 """
-Arquivo para trabalharmos usando classe e orientação a objetos:
+Arquivo que contém os métodos principais para operacionar o robô
 """
-goal = ("green", 11, "cow")
 
-# AMARELO_FAIXA = np.array([255,255,0])
-# VERDE_CREEP = np.array([1,255,2])
-# AZUL_CREEP = np.array([98, 227, 255])
-# LARANJA_CREEP = np.array([255, 16, 0])
+goal = ("green", 21, "horse")
+
 
 class Robot:
     def __init__(self):
@@ -349,7 +346,9 @@ class Robot:
             # Guarda a posição do centro em ALVOS:
             self.ALVO['centro'] = media[0] #(x,y)
             self.INFOS['centro_creeper'] = media[0]
- 
+
+        else:
+            self.INFOS['centro_creeper'] = None
 
     def centraliza_robo(self, alvo):
        
@@ -401,7 +400,6 @@ class Robot:
             #* Quando conseguir ler com precisão, decidir oq fazer (caso id Correto e caso id Errado)
             #* Caso id errado: Fazer girar no sentido oposto ao salvo em self.ALVO['direcaoGiro']
             #* Caso id correto: 1) Avançar e pegar ou 2) Guardar posição para voltar depois
-
 
     def aproxima_alvo_centralizando(self, alvo):
         if (abs(alvo[0] - self.CENTRO_ROBO[0]) >= 20):
@@ -507,7 +505,7 @@ class Robot:
             centro, selecionados = self.encontra_centro_contornos(contornos)
             
             # Ajusta velocidade linear com controle derivativo
-            v = (0.25/90)*(90 - abs(self.angulo)) + 0.13
+            v = (0.20/90)*(90 - abs(self.angulo)) + 0.13
 
             # Velocidade angular com controle proporcional e derivativo
             erro = centro[0] - self.CENTRO_ROBO[0]
