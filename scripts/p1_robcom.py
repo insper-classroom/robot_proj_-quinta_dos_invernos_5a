@@ -12,14 +12,14 @@ from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import Twist, Vector3, Pose, Vector3Stamped
 import aruco1
 import mobilenet_simples
-
+import hud
 import statsmodels.api as sm
 from math import atan, pi
 
 """
 Arquivo para trabalharmos usando classe e orientação a objetos:
 """
-goal = ("orange", 11, "cow")
+goal = ("green", 11, "cow")
 
 # AMARELO_FAIXA = np.array([255,255,0])
 # VERDE_CREEP = np.array([1,255,2])
@@ -48,20 +48,15 @@ class Robot:
         self.output_img = None
         self.CENTRO_ROBO = None
         self.distancias = None
-        self.tolerancia_giro = 20
         self.angulo = 0
 
-        #! Variáveis para guardar filtros de interesse
-        self.visao_creeper = None
-        self.visao_trilha = None 
-        self.visao_aruco = None
 
         self.STATUS = {
             'trilhaON': True,                   # faz o robô percorrer a trilha
             'searchTrilha': False,              # faz o robô girar à direita até achar uma trilha
             
             'arucoON': False,                   # ativa o leitor do aruco
-            'searchCreepON': False,              # ativa a detecção do creeper em função da cor
+            'searchCreepON': True,              # ativa a detecção do creeper em função da cor
                 'confirmId': False,             # detectou massa de creeper na imagem --> 1) Deixa de Seguir Trilha, 2) Centraliza, 3) investiga se é do id desejado
                 'searchCreepMistaked': False,       # confirmId detectou q não é o id correto: --> volta para trilha
                     #! limpar dados em self.ALVO
@@ -79,12 +74,7 @@ class Robot:
                 'deployCreep': False,           # faz o robô dar deploy do creeper
                 'creepDeployed': False,         # faz o robô se afastar da base e procurar a Trilha novamente
             'checkpoint': False,                # variável utilizada para gravar informações pontualmente (sem repetições)
-        
-        }
-
-        self.LOCALIZACOES = {
-            'creeper': None,    # guarda localizacao do Ponto em que o creeper é identificado
-            'base': None,       # guarda localizacao do Ponto em que a base é identificada
+            'delayReturn': False,
         }
 
         self.ALVO = {
@@ -93,9 +83,17 @@ class Robot:
         }
 
         self.CLOCK = {
-            'getTime': False,
             'to': None,
             'tf': None,
+        }
+
+        self.INFOS = {
+            'v': None,
+            'w': None,
+            'cm_trilha': None,
+            'centro_creeper': None,
+            'base_detectada': None,
+            'regressao': None,
         }
 
         #! LOOPING PRINCIPAL
@@ -266,11 +264,8 @@ class Robot:
             self.output_img = cv_image_original.copy()
 
             #! ======================= TESTE ===========================
-            # cv2.imshow("TESTE", self.output_img)
-            #TODO: Desenhar HUD que sinaliza os status
-            # if searchCreepON: acender bolinha amarela na legenda "searchCreepON"
-            # if "confirmId": acender bolinha veremlha na legenda "confirmId"
-
+            hud.drawHUD(self.output_img, self.STATUS, self.INFOS)
+            cv2.imshow("TESTE", self.output_img)
             cv2.waitKey(1)
             #! =========================================================
 
@@ -318,16 +313,6 @@ class Robot:
     def trataScan(self, scanner):
         """ Guarda as distâncias em self.distancias """
         self.distancias = np.array(scanner.ranges).round(decimals=2)  
-        # print(self.distancias[0])  
-
-    def run_mobileNet(self):
-        pass
-    
-    def draw_crossHair(self, img, point, size, color):
-        # Desenha + no meio da tela
-        x,y = point
-        cv2.line(img,(x - size,y),(x + size,y),color,2)
-        cv2.line(img,(x,y - size),(x, y + size),color,2)
 
     def segmenta_cor(self, frame, COR):
         output = frame.copy()
@@ -336,12 +321,12 @@ class Robot:
             bgr_max = np.array([50, 255, 255], dtype=np.uint8)
             segmentado_cor = cv2.inRange(output, bgr_min, bgr_max)
 
-        elif COR == 'verde':
+        elif COR == 'green':
             bgr_min = np.array([0, 50, 0], dtype=np.uint8)
             bgr_max = np.array([5,255,5], dtype=np.uint8)
             segmentado_cor = cv2.inRange(output, bgr_min, bgr_max)
 
-        elif COR == 'azul':
+        elif COR == 'blue':
             # Azul(Malibu)-HSV 360: [191,100,69] --> 180: [95, 50, 35]
             #! Tratar como HSV:
             output = cv2.cvtColor(output, cv2.COLOR_BGR2HSV)
@@ -382,20 +367,15 @@ class Robot:
             print(f"Creeper avistado -- {maior_area}")
             print(f"§=> trilha: {self.STATUS['trilhaON']}")
 
-            #TODO: Fazer desenhar borda do contorno no Creep OU printar ÁREA
-
 
         if not maior_contorno is None:
             media = maior_contorno.mean(axis=0)
             media = media.astype(np.int32)
-            # Desenha um circulo no centro do creeper
-            # cv2.circle(self.output_img, (media[0], media[1]), 5, [100, 255, 100])
 
             # Guarda a posição do centro em ALVOS:
             self.ALVO['centro'] = media[0] #(x,y)
+            self.INFOS['centro_creeper'] = media[0]
  
-
-        #! DESENHA O CENTRO DA ÁREA NA IMG ORIGINAL
 
     def centraliza_robo(self, alvo):
        
@@ -493,35 +473,20 @@ class Robot:
             # self.STATUS['searchCreepMistaked'] = False
             #! Ativa a função que procura a trilha e faz o robô SEGUIR qnd identificar
 
-
-    def searchTrilha(self, frame):
-        #@ searchTrilha = True
-        mask_amarelo = self.segmenta_cor(frame.copy(), 'yellow')
-        contornos, arvore = cv2.findContours(mask_amarelo, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-        soma_areas = 0
-
-        for cnt in contornos:
-            area = cv2.contourArea(cnt)
-            soma_areas += area
-
-        # print(f"AREAS_AMARELO: {soma_areas}")
-        if soma_areas > 3000:
-            print("TRILHA DETECTADA!!")
-
     def encontra_contornos(self, mask):
         #@ searchTrilha = True
         #<> FAZER ESSA FUNÇÃO SER "IDENTIFICA TRILHA" 
         #<> --> trabalhar com ÁREA ou nº de contornos
         #$ Retorna um conjunto de contornos
         contornos, arvore = cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        if len(contornos) > 5:
+        if len(contornos) > 0:
+            if self.STATUS['retornarTrilha']:
+                self.STATUS['delayReturn'] = True
+                self.CLOCK['to2'] = rospy.get_time()
+
+            
             self.STATUS["searchTrilha"] = False
             self.STATUS['retornarTrilha'] = False
-
-            self.STATUS['delayReturn'] = True
-            self.CLOCK['to'] = rospy.get_time()
-
             self.STATUS["trilhaON"] = True
             self.STATUS['creepDeployed'] = False
         else:
@@ -537,9 +502,8 @@ class Robot:
         selecionados = [] # guarda contornos que atendem à condição desejada
 
         if self.STATUS['delayReturn']:
-            self.CLOCK['tf'] = rospy.get_time()
-            delta_t = self.CLOCK['tf'] - self.CLOCK['to']
-            print(delta_t)
+            self.CLOCK['tf2'] = rospy.get_time()
+            delta_t = self.CLOCK['tf2'] - self.CLOCK['to2']
             if delta_t > 3:
                 self.STATUS['delayReturn'] = False
         # Determina o centro dos contornos amarelos
@@ -552,13 +516,14 @@ class Robot:
             cX = int(M["m10"] / M["m00"])
             cY = int(M["m01"] / M["m00"])
             # Exclui pontos mais à esquerda e da parte central superior
-            if (cX > WIDTH//4 and cX < WIDTH//4 * 3 and cY > 350) or (cX > WIDTH//4 * 3 and cY > 320):
+            if (cX > WIDTH//4 and cX < WIDTH//4 * 3 and cY > 350) or (cX > WIDTH//4 * 3 and cY > 320) or self.STATUS['delayReturn']:
                 X.append(cX)
                 Y.append(cY)
                 selecionados.append(contorno)
         mediana_X = int(np.median(X))
         mediana_Y = int(np.median(Y))
         centro = (mediana_X, mediana_Y)
+        self.INFOS['cm_trilha'] = centro
 
         return (centro, selecionados)
 
@@ -576,7 +541,7 @@ class Robot:
             centro, selecionados = self.encontra_centro_contornos(contornos)
             
             # Ajusta velocidade linear com controle derivativo
-            v = (0.13/90)*(90 - abs(self.angulo)) + 0.13
+            v = (0.25/90)*(90 - abs(self.angulo)) + 0.13
 
             # Velocidade angular com controle proporcional e derivativo
             erro = centro[0] - self.CENTRO_ROBO[0]
@@ -585,6 +550,8 @@ class Robot:
             vel = Twist(Vector3(v, 0, 0), Vector3(0, 0, w))
             self.velocidade_saida.publish(vel)
 
+            self.INFOS['v'] = v
+            self.INFOS['w'] = w
             # for c in selecionados:
             #     cv2.drawContours(frame, [c], -1, [255, 0, 0], 3)
             # self.draw_crossHair(frame, (centro[0], HEIGHT//2), 5, (0,255,0))
@@ -623,10 +590,11 @@ class Robot:
     def localiza_base(self, frame):
         #@ chamado qnd searchBaseON = True --> desativa somente qnd próx. da base
         imagem, results = mobilenet_simples.detect(frame)
-        thresholds = {"dog": 95, "horse": 90, "car": 90, "cow": 80}
+        thresholds = {"dog": 95, "horse": 90, "car": 90, "cow": 70}
 
         try:
             if len(results) > 0:
+                self.INFOS['base_detectada'] = results[0]
                 if results[0][0] == goal[2]:
                     print(f"{results[0][0]}: -- {results[0][1]}")
             
@@ -665,6 +633,8 @@ class Robot:
         results = model.fit()
         coef_angular = results.params[1]
         coef_linear =  results.params[0]
+
+        self.INFOS['regressao'] = (ximg, yimg, coef_angular, coef_linear)
         return (coef_angular, coef_linear)
 
     def calcula_angulo(self, coef_angular):
