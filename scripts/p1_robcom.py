@@ -52,28 +52,27 @@ class Robot:
 
 
         self.STATUS = {
-            'trilhaON': True,                   # faz o robô percorrer a trilha
-            'searchTrilha': False,              # faz o robô girar à direita até achar uma trilha
+            'trilhaON': True,                       # faz o robô percorrer a trilha
+            'searchTrilha': False,                  # faz o robô girar à direita até achar uma trilha
             
-            'arucoON': False,                   # ativa o leitor do aruco
-            'searchCreepON': True,              # ativa a detecção do creeper em função da cor
-                'confirmId': False,             # detectou massa de creeper na imagem --> 1) Deixa de Seguir Trilha, 2) Centraliza, 3) investiga se é do id desejado
+            'arucoON': False,                       # ativa o leitor do aruco
+            'searchCreepON': True,                  # ativa a detecção do creeper em função da cor
+                'confirmId': False,                 # detectou massa de creeper na imagem --> 1) Deixa de Seguir Trilha, 2) Centraliza, 3) investiga se é do id desejado
                 'searchCreepMistaked': False,       # confirmId detectou q não é o id correto: --> volta para trilha
-                    #! limpar dados em self.ALVO
 
                 'searchCreepConfirmed': False,      # confirmId detectou q É o id correto: --> pega o Creeper
-                    'garraPosicionada': False,      #* Levanta o ombro parcialmente e abre a garra
-                    'aproximarCreep': False,        #* Aproxima do creep se alinhando com ele 
-                    'creepProximo': False,          #* aproxima até d<18
+                    'garraPosicionada': False,      # Levanta o ombro parcialmente e abre a garra
+                    'aproximarCreep': False,        # Aproxima do creep se alinhando com ele 
+                    'creepProximo': False,          # aproxima até d<18
 
-                    'creepCapturado': False,            #* fecha garra e levante o ombro
+                    'creepCapturado': False,        # fecha garra e levante o ombro
             'retornarTrilha': False,
-            'searchBaseON': False,               # ativa o mobileNet para identificar a base
-                'searchBaseConfirmed': False,   # faz o robô centralizar com a base identificada
-                'aproximaBase': False,          # faz o robô se aproximar da base, centralizando-se
-                'deployCreep': False,           # faz o robô dar deploy do creeper
-                'creepDeployed': False,         # faz o robô se afastar da base e procurar a Trilha novamente
-            'checkpoint': False,                # variável utilizada para gravar informações pontualmente (sem repetições)
+            'searchBaseON': False,                  # ativa o mobileNet para identificar a base
+                'searchBaseConfirmed': False,       # faz o robô centralizar com a base identificada
+                'aproximaBase': False,              # faz o robô se aproximar da base, centralizando-se
+                'deployCreep': False,               # faz o robô dar deploy do creeper
+                'creepDeployed': False,             # faz o robô se afastar da base e procurar a Trilha novamente
+            'checkpoint': False,                    # variável utilizada para gravar informações pontualmente (sem repetições)
             'delayReturn': False,
         }
 
@@ -121,9 +120,6 @@ class Robot:
                     self.gira_direita()
 
             if self.STATUS['confirmId']:
-                #$ if confirmId:
-                # --> Faz o robô confirmar se o creeper avistado é da id desejada
-                # --> Se achar: (1) - Marca posição; (2) - Vai até ele e pega
                 self.centraliza_robo(self.ALVO['centro'])
             
             if self.STATUS['searchCreepMistaked'] and not self.STATUS['trilhaON']:
@@ -157,14 +153,12 @@ class Robot:
                     self.ombro.publish(-0.4)    # levanta o ombro parcialmente
                     self.garra.publish(-1)      # abre a garra
                     self.STATUS['garraPosicionada'] = True
-                    #! Checar se ele faz os dois ao mesmo tempo
 
                 if self.STATUS['garraPosicionada'] and not self.STATUS['creepProximo']: #* previne q o robô ande p/ frente sem desejarmos
                     print(self.distancias[358], self.distancias[0], self.distancias[2])
 
 
-                    if self.distancias[0] > 0.19: # and self.distancias[358] > 0.19 and self.distancias[2] > 0.19: 
-                        #<> PRECISA SER REFINADO!!!!! 
+                    if self.distancias[0] > 0.19: 
                         self.aproxima_alvo_centralizando(self.ALVO['centro'])
                     else:                    
                         self.STATUS['creepProximo'] = True
@@ -213,7 +207,6 @@ class Robot:
 
                 if self.distancias[0] >= 0.4:
                     self.aproxima_alvo_centralizando(self.ALVO['centro'])
-                    # <> CHECAR SE A MOBILENET funciona EM TODA APROXIMACAO
                 else:
                     # robô próximo da base --> fica parado
                     self.vel_parado()
@@ -222,7 +215,6 @@ class Robot:
                     self.STATUS['deployCreep'] = True 
                     self.CLOCK['to'] = rospy.get_time()
                     print("Robô próximo da Base -- Deploy Creeper!!")
-                    #! ativar proximo status: 1. abaixar ombro 2. abrir garra 
 
             if self.STATUS['deployCreep']:
                 self.CLOCK['tf'] = rospy.get_time()
@@ -258,21 +250,17 @@ class Robot:
         try:
             #$ Exibe Imagem Originaloutput_img
             cv_image_original = self.bridge.compressed_imgmsg_to_cv2(frame, "bgr8")
-            # cv2.imshow("Camera", cv_image_original)
-            # cv2.waitKey(1)
             self.CENTRO_ROBO = (cv_image_original.shape[1]//2, cv_image_original.shape[0]//2)
             self.output_img = cv_image_original.copy()
 
             #! ======================= TESTE ===========================
             hud.drawHUD(self.output_img, self.STATUS, self.INFOS)
-            cv2.imshow("TESTE", self.output_img)
+            cv2.imshow("5a dos Invernos", self.output_img)
             cv2.waitKey(1)
             #! =========================================================
 
             HEIGHT = cv_image_original.shape[0]
             WIDTH = cv_image_original.shape[1]
-
-            # self.searchTrilha(cv_image_original)
 
             if self.STATUS['trilhaON']:
                 #$ Segmenta Amarelo (Trilha) e faz robô andar a trilha
@@ -285,21 +273,10 @@ class Robot:
 
             if self.STATUS['searchCreepON']:
                 #$ Segmenta Creeper
-                #>> apenas para visualização (não é necessário exibir a imagem toda vez)
-                """
-                Para que a imagem do Creeper não atrapalhe na detecção da linha, 
-                acredito que tenhamos que analisar os filtros em imagens diferentes.  
-                """
-                segmentado_creeper = self.segmenta_cor(cv_image_original, goal[0])  #! Depois, vamos automatizar para escolher a cor da missão
+                segmentado_creeper = self.segmenta_cor(cv_image_original, goal[0]) 
                 self.calcula_area(segmentado_creeper)  # > 800
-                cv2.imshow("seg_creeper", segmentado_creeper)
-                cv2.waitKey(1)
-
-                #! CALCULA ÁREA --> se maior q X -> confirmId =True --> centraliza no creeper e aproxima.        
             
             if self.STATUS['arucoON']:
-                #! configurar um deltaT para chamar o localiza_id
-                #! CONFIGURAR STATUS p/ IDENTIFICAR ID
                 self.localiza_id(frame, self.ALVO['centro'])
                 self.CLOCK['to'] = rospy.get_time()
                 self.STATUS['confirmId'] = False 
@@ -327,8 +304,6 @@ class Robot:
             segmentado_cor = cv2.inRange(output, bgr_min, bgr_max)
 
         elif COR == 'blue':
-            # Azul(Malibu)-HSV 360: [191,100,69] --> 180: [95, 50, 35]
-            #! Tratar como HSV:
             output = cv2.cvtColor(output, cv2.COLOR_BGR2HSV)
             hsv_min = np.array([93, 40, 28], dtype=np.uint8)
             hsv_max = np.array([98, 255,255], dtype=np.uint8)
@@ -344,8 +319,8 @@ class Robot:
         
         return segmentado_cor
 
-    #@ chamada qnd searchCreepON = True
     def calcula_area(self, segmentado):
+        #@ chamada qnd searchCreepON = True
         contornos, arvore = cv2.findContours(segmentado.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE) 
 
         maior_contorno = None
@@ -358,7 +333,6 @@ class Robot:
                 maior_area = area
         print(f"AREA -- {maior_area} ")
         if (maior_area > 800) and  not self.STATUS['searchCreepMistaked'] and not self.STATUS['searchCreepConfirmed']:
-            #<> Fazer acontecer SÓ SE NENHUM searchCreep (Mistaked/Confirmed) tiver ativado:
             self.STATUS['confirmId'] = True  #! Faz o robô centralizar E aproximar do creeper
             self.STATUS['trilhaON'] = False #! Faz o robô parar de seguir linha
             #$ Ativa CHECKPOINT p/ salvar direção de giro
@@ -428,24 +402,23 @@ class Robot:
             #* Caso id errado: Fazer girar no sentido oposto ao salvo em self.ALVO['direcaoGiro']
             #* Caso id correto: 1) Avançar e pegar ou 2) Guardar posição para voltar depois
 
-        #TODO: Fazer o robô voltar para a direção anterior, caso NÃO seja o id do creeper
 
     def aproxima_alvo_centralizando(self, alvo):
         if (abs(alvo[0] - self.CENTRO_ROBO[0]) >= 20):
                 # Rotaciona E Avança
                 if (alvo[0] > self.CENTRO_ROBO[0]):
                     # Gira p/ direita
-                    print("\t    \t d:", self.distancias[0], "\t -->")
+                    print("d:", self.distancias[0], "\t -->")
                     vel = Twist(Vector3(0.15,0,0), Vector3(0,0,-0.1))
                     self.velocidade_saida.publish(vel)
                 else:
                     # Gira p/ esquerda 
-                    print("\t <-- \t d:", self.distancias[0])
+                    print("d:", self.distancias[0], "\t <--")
                     vel = Twist(Vector3(0.15,0,0), Vector3(0,0,0.1))
                     self.velocidade_saida.publish(vel)
 
         else:
-            print("d:", self.distancias[0],  "\t  ==")
+            print("d:", self.distancias[0],  "\t ==")
             vel = Twist(Vector3(0.2,0,0), Vector3(0,0,0.1))
             self.velocidade_saida.publish(vel)
     
@@ -460,24 +433,18 @@ class Robot:
         if self.STATUS['creepDeployed'] and delta_t < 1.0:
             self.vel_tras()
             self.garra.publish(0)
-            # self.STATUS['searchCreepMistaked'] = False
             #! Ativa a função que procura a trilha e faz o robô SEGUIR qnd identificar
 
         elif self.ALVO['sentidoGiro'] == 'esquerda':
             self.gira_direita()
-            # self.STATUS['searchCreepMistaked'] = False
             #! Ativa a função que procura a trilha e faz o robô SEGUIR qnd identificar
 
         elif self.ALVO['sentidoGiro'] == 'direita':
             self.gira_esquerda()
-            # self.STATUS['searchCreepMistaked'] = False
             #! Ativa a função que procura a trilha e faz o robô SEGUIR qnd identificar
 
     def encontra_contornos(self, mask):
         #@ searchTrilha = True
-        #<> FAZER ESSA FUNÇÃO SER "IDENTIFICA TRILHA" 
-        #<> --> trabalhar com ÁREA ou nº de contornos
-        #$ Retorna um conjunto de contornos
         contornos, arvore = cv2.findContours(mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         if len(contornos) > 0:
             if self.STATUS['retornarTrilha']:
@@ -528,7 +495,6 @@ class Robot:
         return (centro, selecionados)
 
     def percorre_trilha(self, frame):
-        #<> FAZER RECEBER CENTRO apenas E CONTROLAR DIREÇÃO DE MOVIMENTO
         #! Controla processo de manter o robô andando na pista
         # Segmenta amarelo, acha contornos e obtém o centro
         mask_amarelo = self.segmenta_cor(frame.copy(), "yellow")
@@ -552,13 +518,7 @@ class Robot:
 
             self.INFOS['v'] = v
             self.INFOS['w'] = w
-            # for c in selecionados:
-            #     cv2.drawContours(frame, [c], -1, [255, 0, 0], 3)
-            # self.draw_crossHair(frame, (centro[0], HEIGHT//2), 5, (0,255,0))
-            # cv2.line(frame, (WIDTH//2, 0), (WIDTH//2, HEIGHT), color=(0,0,255), thickness=5)
-            # font = cv2.FONT_HERSHEY_SIMPLEX
-            # cv2.putText(frame, f'Angulo = {self.angulo:.2f} graus',(0,50), font, 1,(255,255,255),2,cv2.LINE_AA)
-            # cv2.imshow("TESTE", frame)
+
 
         except:
             print("Trilha perdida")
@@ -651,20 +611,8 @@ class Robot:
         vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0))
         self.velocidade_saida.publish(vel)
 
-    def vel_frente(self):
-        vel = Twist(Vector3(0.23, 0, 0), Vector3(0, 0, 0))
-        self.velocidade_saida.publish(vel)
-
     def vel_tras(self):
         vel = Twist(Vector3(-0.2, 0, 0), Vector3(0, 0, 0))
-        self.velocidade_saida.publish(vel)
-
-    def vel_direita(self):
-        vel = Twist(Vector3(0.2, 0, 0), Vector3(0, 0, -0.25))
-        self.velocidade_saida.publish(vel)
-
-    def vel_esquerda(self):
-        vel = Twist(Vector3(0.2, 0, 0), Vector3(0, 0, 0.25))
         self.velocidade_saida.publish(vel)
 
     def gira_direita(self):
