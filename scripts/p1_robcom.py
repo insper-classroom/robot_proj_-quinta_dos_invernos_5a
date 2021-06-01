@@ -13,6 +13,8 @@ from geometry_msgs.msg import Twist, Vector3, Pose, Vector3Stamped
 import aruco1
 import mobilenet_simples
 
+import statsmodels.api as sm
+from math import atan, pi
 
 """
 Arquivo para trabalharmos usando classe e orientação a objetos:
@@ -47,6 +49,7 @@ class Robot:
         self.CENTRO_ROBO = None
         self.distancias = None
         self.tolerancia_giro = 20
+        self.angulo = 0
 
         #! Variáveis para guardar filtros de interesse
         self.visao_creeper = None
@@ -58,7 +61,7 @@ class Robot:
             'searchTrilha': False,              # faz o robô girar à direita até achar uma trilha
             
             'arucoON': False,                   # ativa o leitor do aruco
-            'searchCreepON': True,              # ativa a detecção do creeper em função da cor
+            'searchCreepON': False,              # ativa a detecção do creeper em função da cor
                 'confirmId': False,             # detectou massa de creeper na imagem --> 1) Deixa de Seguir Trilha, 2) Centraliza, 3) investiga se é do id desejado
                 'searchCreepMistaked': False,       # confirmId detectou q não é o id correto: --> volta para trilha
                     #! limpar dados em self.ALVO
@@ -263,7 +266,7 @@ class Robot:
             self.output_img = cv_image_original.copy()
 
             #! ======================= TESTE ===========================
-            cv2.imshow("TESTE", self.output_img)
+            # cv2.imshow("TESTE", self.output_img)
             #TODO: Desenhar HUD que sinaliza os status
             # if searchCreepON: acender bolinha amarela na legenda "searchCreepON"
             # if "confirmId": acender bolinha veremlha na legenda "confirmId"
@@ -531,6 +534,7 @@ class Robot:
         #$ Retorna tupla que é a mediana dos centros
         X = []
         Y = []
+        selecionados = [] # guarda contornos que atendem à condição desejada
 
         if self.STATUS['delayReturn']:
             self.CLOCK['tf'] = rospy.get_time()
@@ -548,14 +552,15 @@ class Robot:
             cX = int(M["m10"] / M["m00"])
             cY = int(M["m01"] / M["m00"])
             # Exclui pontos mais à esquerda e da parte central superior
-            if (cX > WIDTH//4 and cX < WIDTH//4 * 3 and cY > 350) or (cX > WIDTH//4 * 3 and cY > 305) or self.STATUS['delayReturn']:
+            if (cX > WIDTH//4 and cX < WIDTH//4 * 3 and cY > 350) or (cX > WIDTH//4 * 3 and cY > 320):
                 X.append(cX)
                 Y.append(cY)
+                selecionados.append(contorno)
         mediana_X = int(np.median(X))
         mediana_Y = int(np.median(Y))
         centro = (mediana_X, mediana_Y)
 
-        return centro
+        return (centro, selecionados)
 
     def percorre_trilha(self, frame):
         #<> FAZER RECEBER CENTRO apenas E CONTROLAR DIREÇÃO DE MOVIMENTO
@@ -564,18 +569,29 @@ class Robot:
         mask_amarelo = self.segmenta_cor(frame.copy(), "yellow")
         contornos = self.encontra_contornos(mask_amarelo)
         try:
-            centro = self.encontra_centro_contornos(contornos)
-            # Controla direção do robô
-            if centro[0] - self.CENTRO_ROBO[0] > self.tolerancia_giro:
-                self.vel_direita()
-                print("Trilha -- DIREITA")
-            elif centro[0] - self.CENTRO_ROBO[0] < -self.tolerancia_giro:
-                self.vel_esquerda()
-                print("Trilha -- ESQUERDA")
-            else:
-                self.vel_frente()
-                print("Trilha -- FRENTE")
+            self.processa_ajuste_linear(mask_amarelo)
+        except:
+            pass
+        try:
+            centro, selecionados = self.encontra_centro_contornos(contornos)
             
+            # Ajusta velocidade linear com controle derivativo
+            v = (0.13/90)*(90 - abs(self.angulo)) + 0.13
+
+            # Velocidade angular com controle proporcional e derivativo
+            erro = centro[0] - self.CENTRO_ROBO[0]
+            w = -(0.5/(WIDTH/2))*erro + 0.1*self.angulo/90
+            
+            vel = Twist(Vector3(v, 0, 0), Vector3(0, 0, w))
+            self.velocidade_saida.publish(vel)
+
+            # for c in selecionados:
+            #     cv2.drawContours(frame, [c], -1, [255, 0, 0], 3)
+            # self.draw_crossHair(frame, (centro[0], HEIGHT//2), 5, (0,255,0))
+            # cv2.line(frame, (WIDTH//2, 0), (WIDTH//2, HEIGHT), color=(0,0,255), thickness=5)
+            # font = cv2.FONT_HERSHEY_SIMPLEX
+            # cv2.putText(frame, f'Angulo = {self.angulo:.2f} graus',(0,50), font, 1,(255,255,255),2,cv2.LINE_AA)
+            # cv2.imshow("TESTE", frame)
 
         except:
             print("Trilha perdida")
@@ -631,6 +647,35 @@ class Robot:
 
         except CvBridgeError as e:
             print('ex', e)
+
+    def regressao_linear(self, mask):
+        #$ Recebe imagem limiarizada e retorna os coeficientes
+        #$ da reta (linear e angular)
+        pontos = np.where(mask==255)
+        ximg = []
+        yimg = []
+        # Filtra pontos amarelos usados no equacionamento
+        for i in range(len(pontos[0])):
+            if (pontos[1][i] > WIDTH//4 and pontos[1][i] < WIDTH//4 * 3 and pontos[0][i] > 350) or (pontos[1][i] > WIDTH//4 * 3 and pontos[0][i] > 320):
+                ximg.append(pontos[1][i])
+                yimg.append(pontos[0][i])
+        yimg_c = sm.add_constant(yimg)
+        # Aplica modelo e obtém coeficientes
+        model = sm.OLS(ximg,yimg_c)
+        results = model.fit()
+        coef_angular = results.params[1]
+        coef_linear =  results.params[0]
+        return (coef_angular, coef_linear)
+
+    def calcula_angulo(self, coef_angular):
+        #! Calcula ângulo que a direção do robô forma com a vertical
+        ang_rad = atan(coef_angular)
+        self.angulo = 180*ang_rad/pi
+
+    def processa_ajuste_linear(self, mask):
+        #$ Atualiza ângulo
+        coef_angular, coef_linear = self.regressao_linear(mask)
+        self.calcula_angulo(coef_angular)
 
     def vel_parado(self):
         vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0))
