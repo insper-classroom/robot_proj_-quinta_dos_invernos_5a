@@ -42,7 +42,7 @@ def scaneou(dado):
 
 
 # A função a seguir é chamada sempre que chega um novo frame
-def roda_todo_frame(imagem):
+def roda_todo_frame(imagem, centro_alvo):
 	#print("frame")
 	
 	try:
@@ -51,7 +51,7 @@ def roda_todo_frame(imagem):
 		#cv_image = cv2.resize(cv_image,(cv_image.shape[1]*2,cv_image.shape[0]*2)) # resize image se necessario
 		
 		gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-		gray = gray[210:260, 270:330]
+		gray = gray[240 - 40 : 240 + 40, centro_alvo[0] - 40 : centro_alvo[0] + 40]
 		corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
 		
 		if ids is not None:
@@ -95,7 +95,7 @@ def roda_todo_frame(imagem):
 			ids = ids.tolist()
 
 		# Exibe tela
-		cv2.imshow("Camera", cv_image)
+		cv2.imshow("Aruco_Cam", gray)
 		cv2.waitKey(1)
 	except CvBridgeError as e:
 		print('ex', e)
